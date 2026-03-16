@@ -14,7 +14,7 @@
 
 ## 3. OCR & Extraction
 
-- Moteur : Tesseract
+- Moteur : DocTR (modèles pré-entraînés, backend PyTorch)
 - Champs à extraire :
   - SIRET (14 chiffres)
   - Numéro TVA intracommunautaire
@@ -30,7 +30,7 @@
 - Cohérence SIRET entre facture et attestation d'un même fournisseur
 - Détection d'attestations expirées (date d'expiration < date du jour)
 
-## 5. Front-ends métiers
+## 5. Front-ends métiers (Streamlit)
 
 - **CRM** : afficher fournisseur, SIRET, coordonnées bancaires
 - **Conformité** : afficher statut des attestations, alertes d'expiration
