@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+import copy
+from dataclasses import dataclass, replace
+
 from faker import Faker
 
 
@@ -47,4 +49,31 @@ def generate_company(fake: Faker) -> CompanyIdentity:
         capital_social=fake.random_element([1000, 5000, 10000, 50000, 100000]),
         registration_date=fake.date_between(start_date="-10y", end_date="-1y").isoformat(),
         rcs=f"RCS {city} {siren}",
+    )
+
+
+def with_wrong_siret(company: CompanyIdentity, fake: Faker) -> CompanyIdentity:
+    """Return a copy with a different SIRET/SIREN (breaks cross-document coherence)."""
+    new_siren = fake.numerify("#########")
+    new_siret = new_siren + fake.numerify("#####")
+    tva_key = (12 + 3 * (int(new_siren) % 97)) % 97
+    return replace(
+        company,
+        siren=new_siren,
+        siret=new_siret,
+        tva=f"FR{tva_key:02d}{new_siren}",
+        rcs=f"RCS {company.city} {new_siren}",
+    )
+
+
+def with_wrong_iban(company: CompanyIdentity, fake: Faker) -> CompanyIdentity:
+    """Return a copy with a different IBAN/BIC (RIB won't match facture payment info)."""
+    return replace(
+        company,
+        iban=fake.iban(),
+        bic=fake.swift(),
+        bank_name=fake.random_element([
+            "BNP Paribas", "Société Générale", "Crédit Agricole",
+            "Crédit Mutuel", "LCL", "Banque Populaire", "CIC",
+        ]),
     )
