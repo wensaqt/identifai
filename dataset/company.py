@@ -1,4 +1,3 @@
-import copy
 from dataclasses import dataclass, replace
 
 from faker import Faker

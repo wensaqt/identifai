@@ -259,14 +259,14 @@ def generate_attestation_urssaf(company: CompanyIdentity,
     y = H - 70 * mm
     c.setFont("Helvetica", 10)
     lines = [
-        f"Je soussigné, l'URSSAF, atteste que la société :",
+        "Je soussigné, l'URSSAF, atteste que la société :",
         "",
         f"    {company.name} — {company.forme_juridique}",
         f"    SIRET : {company.siret}",
         f"    {company.address}, {company.zip_code} {company.city}",
         "",
-        f"est à jour de ses obligations de déclaration et de paiement",
-        f"auprès de l'organisme de recouvrement.",
+        "est à jour de ses obligations de déclaration et de paiement",
+        "auprès de l'organisme de recouvrement.",
         "",
         f"Date de délivrance : {date_delivrance.strftime('%d/%m/%Y')}",
         f"Date de fin de validité : {date_fin.strftime('%d/%m/%Y')}",
