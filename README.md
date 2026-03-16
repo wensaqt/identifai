@@ -45,18 +45,31 @@ Cross-document verification
 
 ## Tech stack
 
-- **Backend**: Python
+- **Backend**: Python (FastAPI)
 - **OCR**: DocTR (pre-trained deep learning models, PyTorch)
 - **Frontend**: Streamlit
 - **Database**: NoSQL (MongoDB)
 - **Orchestration**: Airflow
 - **Containerization**: Docker / Docker Compose
-- **Data**: INSEE SIRENE API + Faker
+- **CI/CD**: GitHub Actions
+- **Data**: Faker + ReportLab (synthetic documents with scan noise)
 
 ## Quick start
 
 ```bash
+# Start the platform
 docker compose up
+
+# Backend API:  http://localhost:8000
+# Frontend:     http://localhost:8501
+```
+
+### Generate dataset
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r dataset/requirements.txt
+python -m dataset.generate --count 10 --noise
 ```
 
 ## License
