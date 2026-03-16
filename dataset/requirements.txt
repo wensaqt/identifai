@@ -1,0 +1,4 @@
+faker>=26.0.0
+reportlab>=4.1
+Pillow>=10.0
+PyMuPDF>=1.24
