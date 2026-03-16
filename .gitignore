@@ -27,5 +27,8 @@ Thumbs.db
 *.png
 !docs/**
 
+# Dataset output
+dataset/output/
+
 # Docker
 docker-compose.override.yml
