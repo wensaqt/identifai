@@ -26,7 +26,7 @@ Upload (PDF/images)
 Automatic classification
   │
   ▼
-OCR (Tesseract)
+OCR (DocTR)
   │
   ▼
 Key data extraction
@@ -46,7 +46,8 @@ Cross-document verification
 ## Tech stack
 
 - **Backend**: Python
-- **OCR**: Tesseract
+- **OCR**: DocTR (pre-trained deep learning models, PyTorch)
+- **Frontend**: Streamlit
 - **Database**: NoSQL (MongoDB)
 - **Orchestration**: Airflow
 - **Containerization**: Docker / Docker Compose
