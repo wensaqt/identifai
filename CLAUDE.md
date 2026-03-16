@@ -37,14 +37,18 @@
 
 ## 6. Dataset
 
-- Entreprises réelles via API SIRENE / data.gouv.fr
-- Factures et devis générés avec Faker + templates
-- Bruit appliqué aux scans : rotation, flou, basse résolution
+- Factures et devis générés avec Faker + ReportLab (PDF)
+- 6 types de documents par entreprise, SIRET cohérent entre documents
+- Bruit appliqué aux scans : rotation, flou, niveaux de gris, artefacts JPEG (light/medium/heavy)
+- Métadonnées ground truth en JSON
+- CLI : `python -m dataset.generate --count N --noise --seed 42`
 
 ## 7. Conteneurisation
 
 - Un service par responsabilité (API, worker OCR, BDD, front-ends)
 - Docker Compose pour l'orchestration locale
+- Backend FastAPI (port 8000) avec healthcheck `/health`
+- Frontend Streamlit (port 8501)
 
 ## 8. Orchestration
 
