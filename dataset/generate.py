@@ -131,9 +131,9 @@ def main():
     print(f"Noise level: {noise_level}")
     print(f"  {clean_name}/  — 6 docs, all coherent")
     print(f"  {errors_name}/ — 6 docs, 3 injected errors:")
-    print(f"    - facture SIRET mismatch")
-    print(f"    - attestation URSSAF expired")
-    print(f"    - RIB IBAN mismatch")
+    print("    - facture SIRET mismatch")
+    print("    - attestation URSSAF expired")
+    print("    - RIB IBAN mismatch")
 
 
 if __name__ == "__main__":
