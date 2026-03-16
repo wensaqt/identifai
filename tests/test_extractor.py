@@ -1,0 +1,94 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+
+from extractor import extract_fields
+
+
+class TestSiret:
+    def test_extracts_siret(self):
+        text = "SIRET : 10433218196001"
+        assert extract_fields(text)["siret"] == "10433218196001"
+
+    def test_extracts_siret_client(self):
+        text = "SIRET fournisseur : 10433218196001 SIRET client : 75255341928327"
+        fields = extract_fields(text)
+        assert fields["siret"] == "10433218196001"
+        assert fields["siret_client"] == "75255341928327"
+
+    def test_no_siret_returns_empty(self):
+        assert "siret" not in extract_fields("pas de siret ici")
+
+
+class TestTva:
+    def test_extracts_tva(self):
+        text = "TVA : FR59104332181"
+        assert extract_fields(text)["tva"] == "FR59104332181"
+
+    def test_no_tva(self):
+        assert "tva" not in extract_fields("SIRET : 10433218196001")
+
+
+class TestMontants:
+    def test_extracts_ht(self):
+        text = "Total HT : 1 234,56 €"
+        assert extract_fields(text)["montant_ht"] == "1234.56"
+
+    def test_extracts_ttc(self):
+        text = "Total TTC : 9876.54 €"
+        assert extract_fields(text)["montant_ttc"] == "9876.54"
+
+    def test_no_montants(self):
+        fields = extract_fields("SIRET : 10433218196001")
+        assert "montant_ht" not in fields
+        assert "montant_ttc" not in fields
+
+
+class TestDates:
+    def test_date_emission_slash(self):
+        text = "Date : 02/09/2025"
+        assert extract_fields(text)["date_emission"] == "02/09/2025"
+
+    def test_date_emission_iso(self):
+        text = "Date d inscription : 2017-05-25"
+        assert extract_fields(text)["date_emission"] == "2017-05-25"
+
+    def test_date_expiration(self):
+        text = "Expiration : 31/12/2025"
+        assert extract_fields(text)["date_expiration"] == "31/12/2025"
+
+    def test_no_date(self):
+        assert "date_emission" not in extract_fields("SIRET : 10433218196001")
+
+
+class TestIban:
+    def test_extracts_iban(self):
+        text = "IBAN : FR7630006000011234567890189"
+        fields = extract_fields(text)
+        assert "iban" in fields
+        assert fields["iban"].startswith("FR76")
+
+
+class TestFull:
+    def test_facture(self):
+        text = (
+            "FACTURE Guilbert S.A. SIRET : 10433218196001 TVA : FR59104332181 "
+            "Date : 02/09/2025 Client SIRET : 75255341928327 "
+            "Total HT : 16904.98 € Total TTC : 20285.98 €"
+        )
+        fields = extract_fields(text)
+        assert fields["siret"] == "10433218196001"
+        assert fields["tva"] == "FR59104332181"
+        assert fields["date_emission"] == "02/09/2025"
+        assert fields["montant_ht"] == "16904.98"
+        assert fields["montant_ttc"] == "20285.98"
+
+    def test_attestation_siret(self):
+        text = (
+            "AVIS DE SITUATION AU RÉPERTOIRE SIRENE SIRET : 72604782880829 "
+            "Date d inscription : 2017-05-25"
+        )
+        fields = extract_fields(text)
+        assert fields["siret"] == "72604782880829"
+        assert fields["date_emission"] == "2017-05-25"
