@@ -1,11 +1,13 @@
-.PHONY: install generate up down logs clean
+.PHONY: lint test generate up down logs clean
 
-install:
-	python -m venv .venv
-	.venv/bin/pip install -r dataset/requirements.txt
+lint:
+	docker compose run --rm --build test ruff check .
+
+test:
+	docker compose run --rm --build test
 
 generate:
-	.venv/bin/python -m dataset.generate
+	docker compose run --rm --build dataset
 
 up:
 	docker compose up --build -d
