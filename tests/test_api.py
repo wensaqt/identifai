@@ -65,6 +65,7 @@ class TestOcrEndpoint:
         assert r.status_code == 200
         assert r.json()["text"] == "hello world"
         assert "fields" in r.json()
+        assert "doc_type" in r.json()
 
     def test_fields_extracted_from_text(self, client):
         mock_result = {

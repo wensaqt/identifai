@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
+from classifier import classify_document
 from extractor import extract_fields
 from ocr import extract_text
 
@@ -26,4 +27,5 @@ async def ocr(file: UploadFile = File(...)):
 
     result = extract_text(file_bytes, file.filename)
     result["fields"] = extract_fields(result["text"])
+    result["doc_type"] = classify_document(result["text"])
     return result
