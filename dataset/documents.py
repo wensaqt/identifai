@@ -287,6 +287,55 @@ def generate_attestation_urssaf(company: CompanyIdentity,
     }
 
 
+def generate_attestation_urssaf_expired(company: CompanyIdentity,
+                                         fake: Faker, filepath: str) -> dict:
+    """Generate an URSSAF attestation that is already expired."""
+    c = Canvas(filepath, pagesize=A4)
+
+    c.setFillColorRGB(0.0, 0.2, 0.6)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(30 * mm, H - 30 * mm, "URSSAF")
+    c.setFillColorRGB(0, 0, 0)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(W / 2, H - 50 * mm, "ATTESTATION DE VIGILANCE")
+
+    # Expired: delivered 8-14 months ago, validity of 180 days => expired
+    date_delivrance = fake.date_between(start_date="-14m", end_date="-8m")
+    date_fin = date_delivrance + timedelta(days=180)
+
+    y = H - 70 * mm
+    c.setFont("Helvetica", 10)
+    lines = [
+        "Je soussigné, l'URSSAF, atteste que la société :",
+        "",
+        f"    {company.name} — {company.forme_juridique}",
+        f"    SIRET : {company.siret}",
+        f"    {company.address}, {company.zip_code} {company.city}",
+        "",
+        "est à jour de ses obligations de déclaration et de paiement",
+        "auprès de l'organisme de recouvrement.",
+        "",
+        f"Date de délivrance : {date_delivrance.strftime('%d/%m/%Y')}",
+        f"Date de fin de validité : {date_fin.strftime('%d/%m/%Y')}",
+    ]
+
+    for line in lines:
+        c.drawString(30 * mm, y, line)
+        y -= 6 * mm
+
+    c.save()
+
+    return {
+        "type": "attestation_urssaf",
+        "siret": company.siret,
+        "company_name": company.name,
+        "date_delivrance": date_delivrance.isoformat(),
+        "date_expiration": date_fin.isoformat(),
+        "expired": True,
+    }
+
+
 def generate_kbis(company: CompanyIdentity, fake: Faker, filepath: str) -> dict:
     c = Canvas(filepath, pagesize=A4)
 
