@@ -20,13 +20,13 @@ services:
   test:
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: tests/Dockerfile
     profiles: ["test"]
 
   dataset:
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: tests/Dockerfile
     volumes:
       - ./dataset/output:/app/dataset/output
     entrypoint: ["python", "-m", "dataset.generate"]

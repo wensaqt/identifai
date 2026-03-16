@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-test.txt .
+COPY tests/requirements.txt requirements-test.txt
 COPY dataset/requirements.txt dataset-requirements.txt
 RUN pip install --no-cache-dir -r requirements-test.txt -r dataset-requirements.txt
 
