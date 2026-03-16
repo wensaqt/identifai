@@ -64,6 +64,27 @@ class TestOcrEndpoint:
         )
         assert r.status_code == 200
         assert r.json()["text"] == "hello world"
+        assert "fields" in r.json()
+
+    def test_fields_extracted_from_text(self, client):
+        mock_result = {
+            "filename": "facture.pdf",
+            "pages": 1,
+            "text": "SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
+            "pages_text": ["SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €"],
+        }
+        _ocr_mock.extract_text.return_value = mock_result
+        r = client.post(
+            "/ocr",
+            files={"file": ("facture.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert r.status_code == 200
+        fields = r.json()["fields"]
+        assert fields["siret"] == "10433218196001"
+        assert fields["tva"] == "FR59104332181"
+        assert fields["date_emission"] == "02/09/2025"
+        assert fields["montant_ht"] == "100.00"
+        assert fields["montant_ttc"] == "120.00"
 
     def test_accepts_jpeg(self, client):
         mock_result = {
