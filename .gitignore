@@ -27,5 +27,8 @@ Thumbs.db
 *.png
 !docs/**
 
+# Claude
+CLAUDE.md
+
 # Docker
 docker-compose.override.yml
