@@ -57,20 +57,22 @@ Cross-document verification
 ## Quick start
 
 ```bash
-# Start the platform
-docker compose up
-
-# Backend API:  http://localhost:8000
-# Frontend:     http://localhost:8501
+make install          # Create venv + install deps
+make up               # Start backend + frontend (Docker)
+make generate-noisy   # Generate dataset with scan noise
 ```
 
-### Generate dataset
+| Command | Description |
+|---------|-------------|
+| `make install` | Create venv and install dependencies |
+| `make generate` | Generate clean dataset (10 companies) |
+| `make generate-noisy` | Generate dataset with scan noise |
+| `make up` | Build and start Docker containers |
+| `make down` | Stop containers |
+| `make logs` | Follow container logs |
+| `make clean` | Remove dataset output and Docker images |
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r dataset/requirements.txt
-python -m dataset.generate --count 10 --noise
-```
+**Ports:** Backend API `http://localhost:8000` / Frontend `http://localhost:8501`
 
 ## License
 
