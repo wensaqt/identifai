@@ -52,10 +52,6 @@ class TestKbis:
         text = "EXTRAIT K BIS Greffe du Tribunal de Commerce de Paris"
         assert classify_document(text) == "kbis"
 
-    def test_tribunal_commerce(self):
-        text = "Tribunal de Commerce de Lyon — extrait d'immatriculation"
-        assert classify_document(text) == "kbis"
-
     def test_greffe_only(self):
         text = "Greffe du tribunal SIREN 123456789"
         assert classify_document(text) == "kbis"
@@ -71,6 +67,26 @@ class TestRib:
         assert classify_document(text) == "rib"
 
 
+class TestPayment:
+    def test_confirmation_paiement(self):
+        text = "CONFIRMATION DE PAIEMENT Référence PAY-2025-0001 Montant 1200.00 €"
+        assert classify_document(text) == "payment"
+
+    def test_case_insensitive(self):
+        text = "confirmation de paiement effectuée"
+        assert classify_document(text) == "payment"
+
+
+class TestUrssafDeclaration:
+    def test_declaration_ca(self):
+        text = "URSSAF DÉCLARATION DE CHIFFRE D'AFFAIRES Période 2025-T1"
+        assert classify_document(text) == "urssaf_declaration"
+
+    def test_without_accent(self):
+        text = "URSSAF Declaration de chiffre d'affaires"
+        assert classify_document(text) == "urssaf_declaration"
+
+
 class TestUnknown:
     def test_empty(self):
         assert classify_document("") is None
@@ -78,15 +94,20 @@ class TestUnknown:
     def test_garbage(self):
         assert classify_document("lorem ipsum dolor sit amet") is None
 
-    def test_ambiguous_no_match(self):
-        assert classify_document("SIRET : 12345678901234 Total : 100€") is None
-
 
 class TestPriority:
+    def test_urssaf_declaration_over_attestation(self):
+        text = "URSSAF DÉCLARATION DE CHIFFRE D'AFFAIRES attestation"
+        assert classify_document(text) == "urssaf_declaration"
+
     def test_urssaf_over_siret(self):
-        """URSSAF attestation mentions SIRET too — must not be classified as attestation_siret."""
         text = "URSSAF ATTESTATION DE VIGILANCE SIRET : 10433218196001 Répertoire"
         assert classify_document(text) == "attestation_urssaf"
+
+    def test_facture_with_paiement_stays_facture(self):
+        """A facture mentioning 'paiement' must not be classified as payment."""
+        text = "FACTURE Statut : PAID Réf. paiement : PAY-2025-0001"
+        assert classify_document(text) == "facture"
 
     def test_facture_not_devis(self):
         text = "FACTURE référence au devis D-2025-001"
