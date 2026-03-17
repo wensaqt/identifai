@@ -11,15 +11,17 @@ from dataset.documents import (
     generate_devis,
     generate_facture,
     generate_kbis,
+    generate_payment,
     generate_rib,
+    generate_urssaf_declaration,
 )
 
 
-def _gen(fake, generator, *args):
+def _gen(fake, generator, *args, **kwargs):
     """Call a generator into a temp file and return (metadata, filepath)."""
     fd, path = tempfile.mkstemp(suffix=".pdf")
     os.close(fd)
-    meta = generator(*args, fake, path)
+    meta = generator(*args, fake, path, **kwargs)
     return meta, path
 
 
@@ -30,12 +32,17 @@ class TestFacture:
         client = generate_company(fake)
         meta, path = _gen(fake, generate_facture, company, client)
 
-        assert meta["type"] == "facture"
+        assert meta["type"] == "invoice"
         assert meta["siret_emetteur"] == company.siret
-        assert meta["siret_client"] == client.siret
-        assert meta["tva"] == company.tva
-        assert meta["montant_ttc"] == round(meta["montant_ht"] * 1.20, 2)
+        assert meta["nom_emetteur"] == company.name
+        assert meta["nom_client"] == client.name
+        assert meta["tva_rate"] == 0.20
+        assert meta["montant_tva"] == round(meta["montant_ht"] * 0.20, 2)
+        assert meta["montant_ttc"] == round(meta["montant_ht"] + meta["montant_tva"], 2)
+        assert meta["statut_paiement"] == "unpaid"
+        assert meta["reference_paiement"] is None
         assert "date_emission" in meta
+        assert "date_prestation" in meta
         assert os.path.getsize(path) > 0
         os.unlink(path)
 
@@ -44,8 +51,25 @@ class TestFacture:
         company = generate_company(fake)
         client = generate_company(fake)
         meta, path = _gen(fake, generate_facture, company, client)
+        assert meta["invoice_id"].startswith("F-")
+        os.unlink(path)
 
-        assert meta["numero"].startswith("F-")
+    def test_paid_with_reference(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        client = generate_company(fake)
+        meta, path = _gen(fake, generate_facture, company, client,
+                          statut_paiement="paid", reference_paiement="PAY-001")
+        assert meta["statut_paiement"] == "paid"
+        assert meta["reference_paiement"] == "PAY-001"
+        os.unlink(path)
+
+    def test_override_tva(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        client = generate_company(fake)
+        meta, path = _gen(fake, generate_facture, company, client, override_tva=999.99)
+        assert meta["montant_tva"] == 999.99
         os.unlink(path)
 
 
@@ -61,6 +85,57 @@ class TestDevis:
         assert "date_validite" in meta
         assert meta["date_validite"] > meta["date_emission"]
         assert meta["montant_ttc"] == round(meta["montant_ht"] * 1.20, 2)
+        os.unlink(path)
+
+
+class TestPayment:
+    def test_metadata_fields(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        client = generate_company(fake)
+        meta, path = _gen(fake, generate_payment, company, client)
+
+        assert meta["type"] == "payment"
+        assert "payment_id" in meta
+        assert meta["payment_id"].startswith("PAY-")
+        assert "date_paiement" in meta
+        assert meta["montant"] > 0
+        assert meta["emetteur"] == client.name
+        assert meta["destinataire"] == company.name
+        assert meta["reference_facture"] is None
+        assert meta["methode"] in ("virement", "prélèvement", "chèque", "carte bancaire")
+        os.unlink(path)
+
+    def test_with_invoice_reference(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        client = generate_company(fake)
+        meta, path = _gen(fake, generate_payment, company, client,
+                          invoice_id="F-2025-0001", montant=1500.00)
+        assert meta["reference_facture"] == "F-2025-0001"
+        assert meta["montant"] == 1500.00
+        os.unlink(path)
+
+
+class TestUrssafDeclaration:
+    def test_metadata_fields(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        meta, path = _gen(fake, generate_urssaf_declaration, company)
+
+        assert meta["type"] == "urssaf_declaration"
+        assert "periode" in meta
+        assert meta["periode"].count("-T") == 1
+        assert meta["chiffre_affaires_declare"] > 0
+        assert "date_declaration" in meta
+        assert meta["siret"] == company.siret
+        os.unlink(path)
+
+    def test_with_forced_ca(self, fake):
+        random.seed(42)
+        company = generate_company(fake)
+        meta, path = _gen(fake, generate_urssaf_declaration, company, chiffre_affaires=42000.00)
+        assert meta["chiffre_affaires_declare"] == 42000.00
         os.unlink(path)
 
 
@@ -94,7 +169,6 @@ class TestAttestationUrssaf:
         meta, path = _gen(fake, generate_attestation_urssaf_expired, company)
 
         assert meta["expired"] is True
-        # Delivery must be 8-14 months ago, expiration = delivery + 180 days
         d_del = date.fromisoformat(meta["date_delivrance"])
         d_exp = date.fromisoformat(meta["date_expiration"])
         assert (d_exp - d_del).days == 180

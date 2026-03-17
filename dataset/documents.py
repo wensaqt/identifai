@@ -87,9 +87,16 @@ def _draw_items_table(c: Canvas, items: list[dict], y: float) -> tuple[float, fl
 # ── Document generators ─────────────────────────────────────────────────────
 
 def generate_facture(company: CompanyIdentity, client: CompanyIdentity,
-                     fake: Faker, filepath: str) -> dict:
+                     fake: Faker, filepath: str, *,
+                     tva_rate: float = 0.20,
+                     statut_paiement: str = "unpaid",
+                     reference_paiement: str | None = None,
+                     override_tva: float | None = None) -> dict:
     c = Canvas(filepath, pagesize=A4)
     date_emission = fake.date_between(start_date="-1y", end_date="today")
+    date_prestation = fake.date_between(
+        start_date=date_emission - timedelta(days=30), end_date=date_emission,
+    )
     numero = f"F-{date_emission.year}-{fake.unique.random_int(1, 9999):04d}"
 
     y = _header(c, "FACTURE", company, H - 20 * mm)
@@ -103,6 +110,7 @@ def generate_facture(company: CompanyIdentity, client: CompanyIdentity,
     c.drawString(30 * mm, y, f"Date : {date_emission.strftime('%d/%m/%Y')}")
     c.drawString(120 * mm, y, client.name)
     y -= 5 * mm
+    c.drawString(30 * mm, y, f"Prestation : {date_prestation.strftime('%d/%m/%Y')}")
     c.drawString(120 * mm, y, client.address)
     y -= 5 * mm
     c.drawString(120 * mm, y, f"{client.zip_code} {client.city}")
@@ -113,7 +121,8 @@ def generate_facture(company: CompanyIdentity, client: CompanyIdentity,
     items = _line_items(fake)
     y, total_ht = _draw_items_table(c, items, y)
 
-    tva_amount = round(total_ht * 0.20, 2)
+    # override_tva allows injecting wrong TVA amount for incoherence_tva scenario
+    tva_amount = override_tva if override_tva is not None else round(total_ht * tva_rate, 2)
     total_ttc = round(total_ht + tva_amount, 2)
 
     y -= 8 * mm
@@ -121,12 +130,19 @@ def generate_facture(company: CompanyIdentity, client: CompanyIdentity,
     c.setFont("Helvetica", 10)
     c.drawString(130 * mm, y, f"Total HT :    {total_ht:.2f} €")
     y -= 5 * mm
-    c.drawString(130 * mm, y, f"TVA 20% :     {tva_amount:.2f} €")
+    c.drawString(130 * mm, y, f"TVA {tva_rate*100:.0f}% :     {tva_amount:.2f} €")
     y -= 5 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(130 * mm, y, f"Total TTC :   {total_ttc:.2f} €")
 
-    y -= 15 * mm
+    y -= 10 * mm
+    c.setFont("Helvetica", 9)
+    c.drawString(30 * mm, y, f"Statut : {statut_paiement.upper()}")
+    if reference_paiement:
+        y -= 5 * mm
+        c.drawString(30 * mm, y, f"Réf. paiement : {reference_paiement}")
+
+    y -= 10 * mm
     c.setFont("Helvetica", 8)
     c.drawString(30 * mm, y, f"Règlement par virement — IBAN : {company.iban}  BIC : {company.bic}")
 
@@ -134,14 +150,19 @@ def generate_facture(company: CompanyIdentity, client: CompanyIdentity,
     c.save()
 
     return {
-        "type": "facture",
-        "numero": numero,
+        "type": "invoice",
+        "invoice_id": numero,
         "siret_emetteur": company.siret,
-        "siret_client": client.siret,
-        "tva": company.tva,
-        "montant_ht": total_ht,
-        "montant_ttc": total_ttc,
+        "nom_emetteur": company.name,
+        "nom_client": client.name,
         "date_emission": date_emission.isoformat(),
+        "date_prestation": date_prestation.isoformat(),
+        "montant_ht": total_ht,
+        "tva_rate": tva_rate,
+        "montant_tva": tva_amount,
+        "montant_ttc": total_ttc,
+        "statut_paiement": statut_paiement,
+        "reference_paiement": reference_paiement,
     }
 
 
@@ -542,4 +563,98 @@ def generate_rib(company: CompanyIdentity, fake: Faker, filepath: str) -> dict:
         "iban": company.iban,
         "bic": company.bic,
         "bank_name": company.bank_name,
+    }
+
+
+# ── Payment & Declaration ──────────────────────────────────────────────────
+
+def generate_payment(company: CompanyIdentity, client: CompanyIdentity,
+                     fake: Faker, filepath: str, *,
+                     invoice_id: str | None = None,
+                     montant: float | None = None) -> dict:
+    c = Canvas(filepath, pagesize=A4)
+    date_paiement = fake.date_between(start_date="-6m", end_date="today")
+    payment_id = f"PAY-{date_paiement.year}-{fake.unique.random_int(1, 9999):04d}"
+    montant = montant or round(fake.pyfloat(min_value=100, max_value=50000, right_digits=2), 2)
+    methode = fake.random_element(["virement", "prélèvement", "chèque", "carte bancaire"])
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(W / 2, H - 25 * mm, "CONFIRMATION DE PAIEMENT")
+
+    y = H - 50 * mm
+    fields = [
+        ("Référence", payment_id),
+        ("Date", date_paiement.strftime("%d/%m/%Y")),
+        ("Émetteur", f"{client.name} (SIRET {client.siret})"),
+        ("Destinataire", f"{company.name} (SIRET {company.siret})"),
+        ("Montant", f"{montant:.2f} €"),
+        ("Méthode", methode),
+    ]
+    if invoice_id:
+        fields.append(("Réf. facture", invoice_id))
+
+    for label, value in fields:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(30 * mm, y, f"{label} :")
+        c.setFont("Helvetica", 10)
+        c.drawString(80 * mm, y, value)
+        y -= 8 * mm
+
+    c.save()
+
+    return {
+        "type": "payment",
+        "payment_id": payment_id,
+        "date_paiement": date_paiement.isoformat(),
+        "montant": montant,
+        "emetteur": client.name,
+        "destinataire": company.name,
+        "reference_facture": invoice_id,
+        "methode": methode,
+    }
+
+
+def generate_urssaf_declaration(company: CompanyIdentity,
+                                fake: Faker, filepath: str, *,
+                                chiffre_affaires: float | None = None) -> dict:
+    year = fake.date_between(start_date="-1y", end_date="today").year
+    trimestre = fake.random_element([1, 2, 3, 4])
+    periode = f"{year}-T{trimestre}"
+    date_declaration = fake.date_between(start_date="-3m", end_date="today")
+    ca = chiffre_affaires or round(fake.pyfloat(min_value=5000, max_value=200000, right_digits=2), 2)
+
+    c = Canvas(filepath, pagesize=A4)
+
+    c.setFillColorRGB(0.0, 0.2, 0.6)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(30 * mm, H - 30 * mm, "URSSAF")
+    c.setFillColorRGB(0, 0, 0)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(W / 2, H - 50 * mm, "DÉCLARATION DE CHIFFRE D'AFFAIRES")
+
+    y = H - 70 * mm
+    fields = [
+        ("Entreprise", f"{company.name} — {company.forme_juridique}"),
+        ("SIRET", company.siret),
+        ("Période", periode),
+        ("Chiffre d'affaires déclaré", f"{ca:,.2f} €"),
+        ("Date de déclaration", date_declaration.strftime("%d/%m/%Y")),
+    ]
+
+    for label, value in fields:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(30 * mm, y, f"{label} :")
+        c.setFont("Helvetica", 10)
+        c.drawString(90 * mm, y, value)
+        y -= 8 * mm
+
+    c.save()
+
+    return {
+        "type": "urssaf_declaration",
+        "periode": periode,
+        "chiffre_affaires_declare": ca,
+        "date_declaration": date_declaration.isoformat(),
+        "siret": company.siret,
     }
