@@ -22,6 +22,7 @@ from consts.patterns import (
     EXTRACT_REFERENCE_FACTURE,
     EXTRACT_SIRET,
     EXTRACT_TVA,
+    EXTRACT_TVA_RATE,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,12 @@ class FieldExtractor:
 
     @staticmethod
     def _clean_amount(raw: str) -> str:
-        return raw.replace(" ", "").replace(",", ".")
+        raw = raw.replace(" ", "").replace(",", ".")
+        # Handle OCR artifacts: "5.823.14" → keep only last dot as decimal
+        parts = raw.split(".")
+        if len(parts) > 2:
+            raw = "".join(parts[:-1]) + "." + parts[-1]
+        return raw
 
     def _find_amount(self, pattern: str, text: str) -> str | None:
         raw = self._find(pattern, text)
@@ -84,6 +90,13 @@ class FieldExtractor:
     def get_montant_ttc(self, text: str) -> dict:
         val = self._find_amount(EXTRACT_MONTANT_TTC, text)
         return {F.MONTANT_TTC: val} if val else {}
+
+    def get_tva_rate(self, text: str) -> dict:
+        raw = self._find(EXTRACT_TVA_RATE, text)
+        if not raw:
+            return {}
+        rate = round(int(raw) / 100, 2)
+        return {F.TVA_RATE: str(rate)}
 
     def get_montant_tva(self, text: str) -> dict:
         val = self._find_amount(EXTRACT_MONTANT_TVA, text)
@@ -167,7 +180,7 @@ class FieldExtractor:
 
     def _invoice_extractors(self):
         return [
-            self.get_invoice_id, self.get_siret, self.get_tva,
+            self.get_invoice_id, self.get_siret, self.get_tva, self.get_tva_rate,
             self.get_montant_ht, self.get_montant_ttc, self.get_montant_tva,
             self.get_date_emission, self.get_date_prestation,
         ]

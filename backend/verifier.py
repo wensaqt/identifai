@@ -194,6 +194,27 @@ class DocumentVerifier:
                                        [doc["filename"]]))
         return issues
 
+    def check_missing_payment(self, documents: list[dict]) -> list[dict]:
+        payment_refs = set()
+        for doc in self._get_payments(documents):
+            ref = self._get_field(doc, F.REFERENCE_FACTURE)
+            if ref:
+                payment_refs.add(ref)
+
+        issues = []
+        for doc in self._get_invoices(documents):
+            statut = self._get_field(doc, F.STATUT_PAIEMENT)
+            if statut and statut.lower() == "unpaid":
+                continue
+            invoice_id = self._get_field(doc, F.INVOICE_ID)
+            if not invoice_id:
+                continue
+            if invoice_id not in payment_refs:
+                issues.append(_warning("missing_payment",
+                                       f"Aucun paiement trouvé pour la facture {invoice_id}",
+                                       [doc["filename"]]))
+        return issues
+
     def check_declared_revenue(self, documents: list[dict]) -> list[dict]:
         total_ht = self._sum_invoiced_ht(documents)
         if total_ht == 0:
@@ -216,6 +237,7 @@ class DocumentVerifier:
             self.check_tva_coherence,
             self.check_payment_amount,
             self.check_orphan_payments,
+            self.check_missing_payment,
             self.check_declared_revenue,
         ]
         issues = []

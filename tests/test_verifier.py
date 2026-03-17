@@ -109,6 +109,30 @@ class TestOrphanPayments:
         assert len(issues) == 0
 
 
+class TestMissingPayment:
+    def test_paid_with_payment_no_issue(self):
+        docs = [
+            _doc("f.pdf", "facture", {"invoice_id": "F-2025-0001", "statut_paiement": "paid"}),
+            _doc("p.pdf", "payment", {"reference_facture": "F-2025-0001", "montant": "100.00"}),
+        ]
+        issues = [i for i in verify_documents(docs) if i["type"] == "missing_payment"]
+        assert len(issues) == 0
+
+    def test_no_payment_for_invoice(self):
+        docs = [
+            _doc("f.pdf", "facture", {"invoice_id": "F-2025-0001", "statut_paiement": "paid"}),
+        ]
+        issues = [i for i in verify_documents(docs) if i["type"] == "missing_payment"]
+        assert len(issues) == 1
+
+    def test_unpaid_no_issue(self):
+        docs = [
+            _doc("f.pdf", "facture", {"invoice_id": "F-2025-0001", "statut_paiement": "unpaid"}),
+        ]
+        issues = [i for i in verify_documents(docs) if i["type"] == "missing_payment"]
+        assert len(issues) == 0
+
+
 class TestDeclaredRevenue:
     def test_correct(self):
         docs = [
