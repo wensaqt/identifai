@@ -300,8 +300,8 @@ def generate_attestation_urssaf_expired(company: CompanyIdentity,
     c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(W / 2, H - 50 * mm, "ATTESTATION DE VIGILANCE")
 
-    # Expired: delivered 8-14 months ago, validity of 180 days => expired
-    date_delivrance = fake.date_between(start_date="-14m", end_date="-8m")
+    # Expired: delivered 5-4 years ago, validity of 180 days => clearly expired
+    date_delivrance = fake.date_between(start_date="-5y", end_date="-4y")
     date_fin = date_delivrance + timedelta(days=180)
 
     y = H - 70 * mm
@@ -333,6 +333,125 @@ def generate_attestation_urssaf_expired(company: CompanyIdentity,
         "date_delivrance": date_delivrance.isoformat(),
         "date_expiration": date_fin.isoformat(),
         "expired": True,
+    }
+
+
+def generate_facture_no_amounts(company: CompanyIdentity, client: CompanyIdentity,
+                                fake: Faker, filepath: str) -> dict:
+    """Facture sans totaux HT/TTC — déclenche missing_fields."""
+    c = Canvas(filepath, pagesize=A4)
+    date_emission = fake.date_between(start_date="-1y", end_date="today")
+    numero = f"F-{date_emission.year}-{fake.unique.random_int(1, 9999):04d}"
+
+    y = _header(c, "FACTURE", company, H - 20 * mm)
+
+    y -= 8 * mm
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(30 * mm, y, f"N° {numero}")
+    c.drawString(120 * mm, y, "Client :")
+    y -= 5 * mm
+    c.setFont("Helvetica", 9)
+    c.drawString(30 * mm, y, f"Date : {date_emission.strftime('%d/%m/%Y')}")
+    c.drawString(120 * mm, y, client.name)
+    y -= 5 * mm
+    c.drawString(120 * mm, y, f"SIRET : {client.siret}")
+
+    y -= 15 * mm
+    items = _line_items(fake)
+    y, total_ht = _draw_items_table(c, items, y)
+    # Totaux délibérément omis
+
+    _footer(c, company)
+    c.save()
+
+    return {
+        "type": "facture",
+        "numero": numero,
+        "siret_emetteur": company.siret,
+        "siret_client": client.siret,
+        "date_emission": date_emission.isoformat(),
+        "missing": ["montant_ht", "montant_ttc"],
+    }
+
+
+def generate_rib_no_iban(company: CompanyIdentity, fake: Faker, filepath: str) -> dict:
+    """RIB sans IBAN — déclenche missing_fields."""
+    c = Canvas(filepath, pagesize=A4)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(W / 2, H - 30 * mm, "RELEVÉ D'IDENTITÉ BANCAIRE")
+
+    y = H - 55 * mm
+    fields = [
+        ("Titulaire", company.name),
+        ("Banque", company.bank_name),
+        # IBAN délibérément absent
+        ("BIC / SWIFT", company.bic),
+    ]
+
+    for label, value in fields:
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(30 * mm, y, f"{label} :")
+        c.setFont("Helvetica", 11)
+        c.drawString(75 * mm, y, value)
+        y -= 10 * mm
+
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(W / 2, 20 * mm, "Ce document est confidentiel et destiné exclusivement au destinataire.")
+    c.save()
+
+    return {
+        "type": "rib",
+        "titulaire": company.name,
+        "bic": company.bic,
+        "bank_name": company.bank_name,
+        "missing": ["iban"],
+    }
+
+
+def generate_attestation_urssaf_no_expiry(company: CompanyIdentity,
+                                          fake: Faker, filepath: str) -> dict:
+    """Attestation URSSAF sans date de fin de validité — déclenche missing_fields."""
+    c = Canvas(filepath, pagesize=A4)
+
+    c.setFillColorRGB(0.0, 0.2, 0.6)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(30 * mm, H - 30 * mm, "URSSAF")
+    c.setFillColorRGB(0, 0, 0)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(W / 2, H - 50 * mm, "ATTESTATION DE VIGILANCE")
+
+    date_delivrance = fake.date_between(start_date="-6m", end_date="today")
+
+    y = H - 70 * mm
+    c.setFont("Helvetica", 10)
+    lines = [
+        "Je soussigné, l'URSSAF, atteste que la société :",
+        "",
+        f"    {company.name} — {company.forme_juridique}",
+        f"    SIRET : {company.siret}",
+        f"    {company.address}, {company.zip_code} {company.city}",
+        "",
+        "est à jour de ses obligations de déclaration et de paiement",
+        "auprès de l'organisme de recouvrement.",
+        "",
+        f"Date de délivrance : {date_delivrance.strftime('%d/%m/%Y')}",
+        # Date de fin de validité délibérément absente
+    ]
+
+    for line in lines:
+        c.drawString(30 * mm, y, line)
+        y -= 6 * mm
+
+    c.save()
+
+    return {
+        "type": "attestation_urssaf",
+        "siret": company.siret,
+        "company_name": company.name,
+        "date_delivrance": date_delivrance.isoformat(),
+        "missing": ["date_expiration"],
     }
 
 

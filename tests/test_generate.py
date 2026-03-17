@@ -5,65 +5,64 @@ import tempfile
 
 from dataset.generate import main
 
+EXPECTED_SCENARIOS = [
+    "_clean",
+    "_ERR_siret_mismatch",
+    "_ERR_attestation_expired",
+    "_ERR_all",
+    "_ERR_missing_fields_facture",
+    "_ERR_missing_fields_rib",
+    "_ERR_missing_fields_urssaf",
+]
 
-def test_generate_creates_two_folders(monkeypatch):
-    """make generate must produce one clean and one errors folder."""
+
+def _run(monkeypatch):
     outdir = tempfile.mkdtemp()
-    monkeypatch.setattr(
-        "sys.argv",
-        ["generate", "--output", outdir, "--seed", "42"],
-    )
-
+    monkeypatch.setattr("sys.argv", ["generate", "--output", outdir, "--seed", "42"])
     main()
+    return outdir
 
+
+def test_generate_creates_all_scenario_folders(monkeypatch):
+    outdir = _run(monkeypatch)
     subdirs = [d for d in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, d))]
-    assert len(subdirs) == 2
-    clean = [d for d in subdirs if d.endswith("_clean")]
-    errors = [d for d in subdirs if d.endswith("_errors")]
-    assert len(clean) == 1
-    assert len(errors) == 1
-
-    # Each folder has 6 PDFs + metadata.json
-    for d in subdirs:
-        folder = os.path.join(outdir, d)
-        files = os.listdir(folder)
-        pdfs = [f for f in files if f.endswith(".pdf")]
-        assert len(pdfs) == 6
-        assert "metadata.json" in files
-
+    assert len(subdirs) == len(EXPECTED_SCENARIOS)
+    for suffix in EXPECTED_SCENARIOS:
+        assert any(d.endswith(suffix) for d in subdirs), f"Missing folder ending with {suffix}"
     shutil.rmtree(outdir)
 
 
 def test_clean_metadata_has_no_errors(monkeypatch):
-    outdir = tempfile.mkdtemp()
-    monkeypatch.setattr("sys.argv", ["generate", "--output", outdir, "--seed", "42"])
-    main()
-
+    outdir = _run(monkeypatch)
     subdirs = os.listdir(outdir)
     clean_dir = [d for d in subdirs if d.endswith("_clean")][0]
     with open(os.path.join(outdir, clean_dir, "metadata.json")) as f:
         meta = json.load(f)
-
     assert meta["scenario"] == "clean"
     assert meta["errors"] == []
     assert len(meta["documents"]) == 6
-
     shutil.rmtree(outdir)
 
 
 def test_errors_metadata_lists_injected_errors(monkeypatch):
-    outdir = tempfile.mkdtemp()
-    monkeypatch.setattr("sys.argv", ["generate", "--output", outdir, "--seed", "42"])
-    main()
-
+    outdir = _run(monkeypatch)
     subdirs = os.listdir(outdir)
-    errors_dir = [d for d in subdirs if d.endswith("_errors")][0]
-    with open(os.path.join(outdir, errors_dir, "metadata.json")) as f:
+    err_dir = [d for d in subdirs if d.endswith("_ERR_all")][0]
+    with open(os.path.join(outdir, err_dir, "metadata.json")) as f:
         meta = json.load(f)
+    assert meta["scenario"] == "ERR_all"
+    assert "siret_mismatch" in meta["expected_alerts"]
+    assert "expired_attestation" in meta["expected_alerts"]
+    shutil.rmtree(outdir)
 
-    assert meta["scenario"] == "errors"
-    assert "siret_mismatch_facture" in meta["errors"]
-    assert "expired_urssaf" in meta["errors"]
-    assert "wrong_iban" in meta["errors"]
 
+def test_missing_fields_scenarios_have_metadata(monkeypatch):
+    outdir = _run(monkeypatch)
+    subdirs = os.listdir(outdir)
+    for suffix in ["_ERR_missing_fields_facture", "_ERR_missing_fields_rib", "_ERR_missing_fields_urssaf"]:
+        d = [x for x in subdirs if x.endswith(suffix)][0]
+        with open(os.path.join(outdir, d, "metadata.json")) as f:
+            meta = json.load(f)
+        assert "missing_fields" in meta["expected_alerts"]
+        assert len(meta["missing"]) > 0
     shutil.rmtree(outdir)
