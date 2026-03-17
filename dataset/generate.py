@@ -16,10 +16,13 @@ from .documents import (
     generate_attestation_siret,
     generate_attestation_urssaf,
     generate_attestation_urssaf_expired,
+    generate_attestation_urssaf_no_expiry,
     generate_devis,
     generate_facture,
+    generate_facture_no_amounts,
     generate_kbis,
     generate_rib,
+    generate_rib_no_iban,
 )
 from .noise import apply_noise
 
@@ -97,43 +100,109 @@ def main():
     with open(os.path.join(clean_dir, "metadata.json"), "w", encoding="utf-8") as f:
         json.dump(clean_meta, f, ensure_ascii=False, indent=2)
 
-    # ── 2. Errors folder: same company, multiple injected errors ─────────
-    errors_name = f"{slug}_errors"
-    errors_dir = os.path.join(args.output, errors_name)
-
-    bad_company_facture = with_wrong_siret(company, fake)
+    bad_company = with_wrong_siret(company, fake)
     bad_company_rib = with_wrong_iban(company, fake)
 
-    errors_generators = [
-        ("facture", lambda p: generate_facture(bad_company_facture, client, fake, p)),
+    # ── 2. SIRET mismatch: facture SIRET differs from attestations ────────
+    # ATTENDU : alerte siret_mismatch sur facture.pdf + attestation_siret.pdf
+    siret_mismatch_name = f"{slug}_ERR_siret_mismatch"
+    siret_mismatch_dir = os.path.join(args.output, siret_mismatch_name)
+    siret_mismatch_generators = [
+        ("facture", lambda p: generate_facture(bad_company, client, fake, p)),
+        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
+        ("attestation_urssaf", lambda p: generate_attestation_urssaf(company, fake, p)),
+    ]
+    sm_docs = _generate_docs(siret_mismatch_generators, siret_mismatch_dir, noise_level)
+    with open(os.path.join(siret_mismatch_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_siret_mismatch", "expected_alerts": ["siret_mismatch"],
+                   "company_siret": company.siret, "bad_siret": bad_company.siret,
+                   "noise_level": noise_level, "documents": sm_docs}, f, ensure_ascii=False, indent=2)
+
+    # ── 3. Expired attestation URSSAF ─────────────────────────────────────
+    # ATTENDU : alerte expired_attestation sur attestation_urssaf.pdf
+    expired_name = f"{slug}_ERR_attestation_expired"
+    expired_dir = os.path.join(args.output, expired_name)
+    expired_generators = [
+        ("facture", lambda p: generate_facture(company, client, fake, p)),
+        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
+        ("attestation_urssaf", lambda p: generate_attestation_urssaf_expired(company, fake, p)),
+    ]
+    exp_docs = _generate_docs(expired_generators, expired_dir, noise_level)
+    with open(os.path.join(expired_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_attestation_expired", "expected_alerts": ["expired_attestation"],
+                   "noise_level": noise_level, "documents": exp_docs}, f, ensure_ascii=False, indent=2)
+
+    # ── 4. All errors combined ────────────────────────────────────────────
+    # ATTENDU : siret_mismatch + expired_attestation + missing_fields (rib sans iban)
+    all_errors_name = f"{slug}_ERR_all"
+    all_errors_dir = os.path.join(args.output, all_errors_name)
+    all_errors_generators = [
+        ("facture", lambda p: generate_facture(bad_company, client, fake, p)),
         ("devis", lambda p: generate_devis(company, client, fake, p)),
         ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
         ("attestation_urssaf", lambda p: generate_attestation_urssaf_expired(company, fake, p)),
         ("kbis", lambda p: generate_kbis(company, fake, p)),
         ("rib", lambda p: generate_rib(bad_company_rib, fake, p)),
     ]
+    all_docs = _generate_docs(all_errors_generators, all_errors_dir, noise_level)
+    with open(os.path.join(all_errors_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_all", "expected_alerts": ["siret_mismatch", "expired_attestation"],
+                   "noise_level": noise_level, "documents": all_docs}, f, ensure_ascii=False, indent=2)
 
-    errors_docs = _generate_docs(errors_generators, errors_dir, noise_level)
+    # ── 5. Missing fields: facture sans montants ──────────────────────────
+    # ATTENDU : missing_fields sur facture.pdf (montant_ht, montant_ttc)
+    mf_facture_name = f"{slug}_ERR_missing_fields_facture"
+    mf_facture_dir = os.path.join(args.output, mf_facture_name)
+    mf_facture_generators = [
+        ("facture", lambda p: generate_facture_no_amounts(company, client, fake, p)),
+        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
+    ]
+    mf_facture_docs = _generate_docs(mf_facture_generators, mf_facture_dir, noise_level)
+    with open(os.path.join(mf_facture_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_missing_fields_facture",
+                   "expected_alerts": ["missing_fields"],
+                   "missing": ["montant_ht", "montant_ttc"],
+                   "noise_level": noise_level, "documents": mf_facture_docs}, f, ensure_ascii=False, indent=2)
 
-    errors_meta = {
-        "company_name": company.name,
-        "company_siret": company.siret,
-        "scenario": "errors",
-        "errors": ["siret_mismatch_facture", "expired_urssaf", "wrong_iban"],
-        "noise_level": noise_level,
-        "documents": errors_docs,
-    }
-    with open(os.path.join(errors_dir, "metadata.json"), "w", encoding="utf-8") as f:
-        json.dump(errors_meta, f, ensure_ascii=False, indent=2)
+    # ── 6. Missing fields: RIB sans IBAN ─────────────────────────────────
+    # ATTENDU : missing_fields sur rib.pdf (iban)
+    mf_rib_name = f"{slug}_ERR_missing_fields_rib"
+    mf_rib_dir = os.path.join(args.output, mf_rib_name)
+    mf_rib_generators = [
+        ("rib", lambda p: generate_rib_no_iban(company, fake, p)),
+    ]
+    mf_rib_docs = _generate_docs(mf_rib_generators, mf_rib_dir, noise_level)
+    with open(os.path.join(mf_rib_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_missing_fields_rib",
+                   "expected_alerts": ["missing_fields"],
+                   "missing": ["iban"],
+                   "noise_level": noise_level, "documents": mf_rib_docs}, f, ensure_ascii=False, indent=2)
+
+    # ── 7. Missing fields: attestation URSSAF sans date d'expiration ──────
+    # ATTENDU : missing_fields sur attestation_urssaf.pdf (date_expiration)
+    mf_urssaf_name = f"{slug}_ERR_missing_fields_urssaf"
+    mf_urssaf_dir = os.path.join(args.output, mf_urssaf_name)
+    mf_urssaf_generators = [
+        ("attestation_urssaf", lambda p: generate_attestation_urssaf_no_expiry(company, fake, p)),
+    ]
+    mf_urssaf_docs = _generate_docs(mf_urssaf_generators, mf_urssaf_dir, noise_level)
+    with open(os.path.join(mf_urssaf_dir, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"scenario": "ERR_missing_fields_urssaf",
+                   "expected_alerts": ["missing_fields"],
+                   "missing": ["date_expiration"],
+                   "noise_level": noise_level, "documents": mf_urssaf_docs}, f, ensure_ascii=False, indent=2)
 
     # ── Summary ──────────────────────────────────────────────────────────
-    print(f"Company: {company.name} (SIRET {company.siret})")
-    print(f"Noise level: {noise_level}")
-    print(f"  {clean_name}/  — 6 docs, all coherent")
-    print(f"  {errors_name}/ — 6 docs, 3 injected errors:")
-    print("    - facture SIRET mismatch")
-    print("    - attestation URSSAF expired")
-    print("    - RIB IBAN mismatch")
+    print(f"Company  : {company.name} (SIRET {company.siret})")
+    print(f"Bad SIRET: {bad_company.siret}")
+    print(f"Noise    : {noise_level}")
+    print(f"  {clean_name}/                  — ✅ tous cohérents")
+    print(f"  {siret_mismatch_name}/  — 🔴 siret_mismatch")
+    print(f"  {expired_name}/   — 🔴 expired_attestation")
+    print(f"  {all_errors_name}/                     — 🔴 siret_mismatch + expired_attestation")
+    print(f"  {mf_facture_name}/ — 🔴 missing_fields (montant_ht, montant_ttc)")
+    print(f"  {mf_rib_name}/     — 🔴 missing_fields (iban)")
+    print(f"  {mf_urssaf_name}/  — 🔴 missing_fields (date_expiration)")
 
 
 if __name__ == "__main__":

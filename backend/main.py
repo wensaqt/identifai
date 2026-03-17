@@ -3,6 +3,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from classifier import classify_document
 from extractor import extract_fields
 from ocr import extract_text
+from verifier import verify_documents
 
 app = FastAPI(title="IdentifAI API")
 
@@ -29,3 +30,9 @@ async def ocr(file: UploadFile = File(...)):
     result["fields"] = extract_fields(result["text"])
     result["doc_type"] = classify_document(result["text"])
     return result
+
+
+@app.post("/verify")
+async def verify(documents: list[dict]):
+    """Verify a batch of OCR results for inter-document coherence."""
+    return {"issues": verify_documents(documents)}
