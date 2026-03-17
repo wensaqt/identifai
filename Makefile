@@ -9,6 +9,9 @@ test:
 generate:
 	docker compose run --rm --build dataset
 
+generate-noisy:
+	docker compose run --rm --build dataset --noise medium
+
 up:
 	docker compose up --build -d
 
