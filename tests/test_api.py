@@ -66,13 +66,14 @@ class TestOcrEndpoint:
         assert r.json()["text"] == "hello world"
         assert "fields" in r.json()
         assert "doc_type" in r.json()
+        assert "validation" in r.json()
 
-    def test_fields_extracted_from_text(self, client):
+    def test_pipeline_classify_then_extract(self, client):
         mock_result = {
             "filename": "facture.pdf",
             "pages": 1,
-            "text": "SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
-            "pages_text": ["SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €"],
+            "text": "FACTURE SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
+            "pages_text": ["..."],
         }
         _ocr_mock.extract_text.return_value = mock_result
         r = client.post(
@@ -80,12 +81,13 @@ class TestOcrEndpoint:
             files={"file": ("facture.pdf", b"%PDF-1.4 fake", "application/pdf")},
         )
         assert r.status_code == 200
-        fields = r.json()["fields"]
-        assert fields["siret"] == "10433218196001"
-        assert fields["tva"] == "FR59104332181"
-        assert fields["date_emission"] == "02/09/2025"
-        assert fields["montant_ht"] == "100.00"
-        assert fields["montant_ttc"] == "120.00"
+        data = r.json()
+        assert data["doc_type"] == "facture"
+        # Type-aware extraction: siret remapped to siret_emetteur
+        assert "siret_emetteur" in data["fields"]
+        assert data["fields"]["tva"] == "FR59104332181"
+        # Validation present and valid
+        assert data["validation"]["is_valid"] is True
 
     def test_accepts_jpeg(self, client):
         mock_result = {

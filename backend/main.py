@@ -3,6 +3,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from classifier import classify_document
 from extractor import extract_fields
 from ocr import extract_text
+from validator import validate_document
 from verifier import verify_documents
 
 app = FastAPI(title="IdentifAI API")
@@ -27,8 +28,9 @@ async def ocr(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File exceeds 20 MB limit")
 
     result = extract_text(file_bytes, file.filename)
-    result["fields"] = extract_fields(result["text"])
     result["doc_type"] = classify_document(result["text"])
+    result["fields"] = extract_fields(result["text"], result["doc_type"])
+    result["validation"] = validate_document(result["doc_type"], result["fields"])
     return result
 
 
