@@ -171,3 +171,4 @@ make clean
 2. **Frontend métier** (CRM + Conformité, vues Streamlit)
 3. **Airflow** — orchestration du pipeline
 4. **Déploiement** (Coolify / VPS)
+
