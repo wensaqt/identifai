@@ -7,256 +7,250 @@ import random
 
 from faker import Faker
 
-from .company import generate_company, with_wrong_siret
-from .documents import (
-    generate_attestation_siret,
-    generate_attestation_urssaf,
-    generate_attestation_urssaf_expired,
-    generate_devis,
-    generate_facture,
-    generate_kbis,
-    generate_payment,
-    generate_rib,
-    generate_urssaf_declaration,
+from .factories.company import CompanyFactory, CompanyIdentity
+from .factories.documents import (
+    AttestationSiretFactory,
+    AttestationUrssafFactory,
+    DevisFactory,
+    InvoiceFactory,
+    KbisFactory,
+    PaymentFactory,
+    RibFactory,
+    UrssafDeclarationFactory,
 )
-from .noise import apply_noise
+from .factories.noise import NoiseLevel, ScanSimulator
 
 
-def _generate_docs(generators, output_dir, noise_level):
-    """Generate all docs into output_dir, apply noise, return metadata list."""
-    os.makedirs(output_dir, exist_ok=True)
-    docs_meta = []
+class ScenarioGenerator:
 
-    for doc_type, gen_func in generators:
-        filepath = os.path.join(output_dir, f"{doc_type}.pdf")
+    def __init__(self, fake: Faker, output_dir: str, noise_level: NoiseLevel):
+        self._fake = fake
+        self._output_dir = output_dir
+        self._noise = noise_level
+        self._scanner = ScanSimulator()
+
+        # Factories
+        self._invoices = InvoiceFactory(fake)
+        self._devis = DevisFactory(fake)
+        self._attestation_siret = AttestationSiretFactory(fake)
+        self._attestation_urssaf = AttestationUrssafFactory(fake)
+        self._kbis = KbisFactory(fake)
+        self._rib = RibFactory(fake)
+        self._payments = PaymentFactory(fake)
+        self._declarations = UrssafDeclarationFactory(fake)
+
+    # ── Doc generation helpers ───────────────────────────────────────────
+
+    def _generate_doc(self, folder: str, doc_type: str, gen_func) -> dict:
+        filepath = os.path.join(folder, f"{doc_type}.pdf")
         meta = gen_func(filepath)
+        self._apply_noise(filepath)
+        meta["filename"] = f"{doc_type}.pdf"
+        meta["noise_level"] = str(self._noise)
+        return meta
 
+    def _apply_noise(self, filepath: str) -> None:
+        if self._noise == NoiseLevel.NONE:
+            return
         noisy_path = filepath.replace(".pdf", "_scan.pdf")
-        apply_noise(filepath, noisy_path, noise_level)
+        self._scanner.apply_noise(filepath, noisy_path, self._noise)
         os.remove(filepath)
         os.rename(noisy_path, filepath)
 
-        meta["filename"] = f"{doc_type}.pdf"
-        meta["noise_level"] = noise_level
-        docs_meta.append(meta)
+    def _write_scenario(self, name: str, meta: dict, doc_specs: list[tuple[str, callable]]) -> None:
+        folder = os.path.join(self._output_dir, name)
+        os.makedirs(folder, exist_ok=True)
+        docs = [self._generate_doc(folder, dt, fn) for dt, fn in doc_specs]
+        meta["noise_level"] = str(self._noise)
+        meta["documents"] = docs
+        with open(os.path.join(folder, "metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    return docs_meta
+    def _scenario_meta(self, scenario_type: str, description: str,
+                       anomalies: list[str], risk: str, **extra) -> dict:
+        meta = {
+            "scenario_type": scenario_type,
+            "description": description,
+            "expected_anomalies": anomalies,
+            "risk_level": risk,
+        }
+        meta.update(extra)
+        return meta
 
+    # ── Scenarios ────────────────────────────────────────────────────────
 
-def _write_scenario(output_dir, name, scenario_meta, generators, noise_level):
-    """Generate a full scenario folder with docs + metadata.json."""
-    folder = os.path.join(output_dir, name)
-    docs = _generate_docs(generators, folder, noise_level)
-    scenario_meta["noise_level"] = noise_level
-    scenario_meta["documents"] = docs
-    with open(os.path.join(folder, "metadata.json"), "w", encoding="utf-8") as f:
-        json.dump(scenario_meta, f, ensure_ascii=False, indent=2)
-    return docs
+    def happy_path(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        invoice_meta = {}
 
+        def _invoice(p):
+            m = self._invoices.create(company, client, p, statut_paiement="paid", reference_paiement="PAY-PENDING")
+            invoice_meta.update(m)
+            return m
 
-# ── Scenarios ────────────────────────────────────────────────────────────────
+        def _payment(p):
+            return self._payments.create(company, client, p,
+                                         invoice_id=invoice_meta.get("invoice_id"),
+                                         montant=invoice_meta.get("montant_ttc"))
 
-def _happy_path(company, client, fake, output_dir, noise_level):
-    """All documents coherent, invoice paid, matching payment, correct declaration."""
-    # Generate facture first to get amounts
-    invoice_meta = {}
+        def _declaration(p):
+            return self._declarations.create(company, p,
+                                             chiffre_affaires=invoice_meta.get("montant_ht"))
 
-    def _facture(p):
-        m = generate_facture(company, client, fake, p,
-                             statut_paiement="paid", reference_paiement="PAY-PENDING")
-        invoice_meta.update(m)
-        return m
+        self._write_scenario("happy_path",
+            self._scenario_meta("happy_path",
+                "Tous les documents sont cohérents. Facture payée, paiement correspondant, déclaration URSSAF correcte.",
+                [], "low"),
+            [
+                ("invoice", _invoice),
+                ("devis", lambda p: self._devis.create(company, client, p)),
+                ("payment", _payment),
+                ("urssaf_declaration", _declaration),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+                ("attestation_urssaf", lambda p: self._attestation_urssaf.create(company, p)),
+                ("kbis", lambda p: self._kbis.create(company, p)),
+                ("rib", lambda p: self._rib.create(company, p)),
+            ])
 
-    def _payment(p):
-        return generate_payment(company, client, fake, p,
-                                invoice_id=invoice_meta.get("invoice_id"),
-                                montant=invoice_meta.get("montant_ttc"))
+    def missing_payment(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        self._write_scenario("missing_payment",
+            self._scenario_meta("missing_payment",
+                "Facture impayée sans justificatif de paiement.",
+                ["missing_payment"], "medium"),
+            [
+                ("invoice", lambda p: self._invoices.create(company, client, p, statut_paiement="unpaid")),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+                ("attestation_urssaf", lambda p: self._attestation_urssaf.create(company, p)),
+            ])
 
-    def _declaration(p):
-        return generate_urssaf_declaration(company, fake, p,
-                                           chiffre_affaires=invoice_meta.get("montant_ht"))
+    def mauvais_siret(self, company: CompanyIdentity, client: CompanyIdentity,
+                      company_factory: CompanyFactory) -> None:
+        bad = company_factory.with_wrong_siret(company)
+        self._write_scenario("mauvais_siret",
+            self._scenario_meta("mauvais_siret",
+                "Le SIRET de la facture ne correspond pas aux attestations.",
+                ["siret_mismatch"], "high",
+                bad_siret=bad.siret, expected_siret=company.siret),
+            [
+                ("invoice", lambda p: self._invoices.create(bad, client, p)),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+                ("attestation_urssaf", lambda p: self._attestation_urssaf.create(company, p)),
+                ("kbis", lambda p: self._kbis.create(company, p)),
+            ])
 
-    generators = [
-        ("invoice", _facture),
-        ("devis", lambda p: generate_devis(company, client, fake, p)),
-        ("payment", _payment),
-        ("urssaf_declaration", _declaration),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-        ("attestation_urssaf", lambda p: generate_attestation_urssaf(company, fake, p)),
-        ("kbis", lambda p: generate_kbis(company, fake, p)),
-        ("rib", lambda p: generate_rib(company, fake, p)),
-    ]
+    def revenus_sous_declares(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        invoice_meta = {}
 
-    _write_scenario(output_dir, "happy_path", {
-        "scenario_type": "happy_path",
-        "description": "Tous les documents sont cohérents. Facture payée, paiement correspondant, déclaration URSSAF correcte.",
-        "expected_anomalies": [],
-        "risk_level": "low",
-    }, generators, noise_level)
+        def _invoice(p):
+            m = self._invoices.create(company, client, p, statut_paiement="paid")
+            invoice_meta.update(m)
+            return m
 
+        def _declaration(p):
+            real_ht = invoice_meta.get("montant_ht", 10000)
+            declared = round(real_ht * random.uniform(0.3, 0.6), 2)
+            return self._declarations.create(company, p, chiffre_affaires=declared)
 
-def _missing_payment(company, client, fake, output_dir, noise_level):
-    """Invoice unpaid, no payment document."""
-    generators = [
-        ("invoice", lambda p: generate_facture(company, client, fake, p, statut_paiement="unpaid")),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-        ("attestation_urssaf", lambda p: generate_attestation_urssaf(company, fake, p)),
-    ]
+        self._write_scenario("revenus_sous_declares",
+            self._scenario_meta("revenus_sous_declares",
+                "Le CA déclaré à l'URSSAF est inférieur au montant HT facturé.",
+                ["undeclared_revenue"], "high"),
+            [
+                ("invoice", _invoice),
+                ("urssaf_declaration", _declaration),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+            ])
 
-    _write_scenario(output_dir, "missing_payment", {
-        "scenario_type": "missing_payment",
-        "description": "Facture impayée sans justificatif de paiement.",
-        "expected_anomalies": ["missing_payment"],
-        "risk_level": "medium",
-    }, generators, noise_level)
+    def incoherence_tva(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        wrong_tva = round(random.uniform(500, 2000), 2)
+        self._write_scenario("incoherence_tva",
+            self._scenario_meta("incoherence_tva",
+                "Le montant de TVA ne correspond pas au taux appliqué sur le HT.",
+                ["tva_mismatch"], "medium"),
+            [
+                ("invoice", lambda p: self._invoices.create(company, client, p, override_tva=wrong_tva)),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+            ])
 
+    def attestation_expiree(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        self._write_scenario("attestation_expiree",
+            self._scenario_meta("attestation_expiree",
+                "L'attestation URSSAF est expirée.",
+                ["expired_attestation"], "high"),
+            [
+                ("invoice", lambda p: self._invoices.create(company, client, p)),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+                ("attestation_urssaf", lambda p: self._attestation_urssaf.create_expired(company, p)),
+                ("kbis", lambda p: self._kbis.create(company, p)),
+            ])
 
-def _mauvais_siret(company, client, fake, output_dir, noise_level):
-    """SIRET on invoice doesn't match attestation SIRET."""
-    bad = with_wrong_siret(company, fake)
+    def paiement_sans_facture(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        self._write_scenario("paiement_sans_facture",
+            self._scenario_meta("paiement_sans_facture",
+                "Un paiement référence une facture inexistante.",
+                ["orphan_payment"], "medium"),
+            [
+                ("payment", lambda p: self._payments.create(company, client, p, invoice_id="F-0000-0000")),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+            ])
 
-    generators = [
-        ("invoice", lambda p: generate_facture(bad, client, fake, p)),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-        ("attestation_urssaf", lambda p: generate_attestation_urssaf(company, fake, p)),
-        ("kbis", lambda p: generate_kbis(company, fake, p)),
-    ]
+    def montant_paiement_incorrect(self, company: CompanyIdentity, client: CompanyIdentity) -> None:
+        invoice_meta = {}
 
-    _write_scenario(output_dir, "mauvais_siret", {
-        "scenario_type": "mauvais_siret",
-        "description": "Le SIRET de la facture ne correspond pas aux attestations.",
-        "expected_anomalies": ["siret_mismatch"],
-        "risk_level": "high",
-        "bad_siret": bad.siret,
-        "expected_siret": company.siret,
-    }, generators, noise_level)
+        def _invoice(p):
+            m = self._invoices.create(company, client, p, statut_paiement="paid")
+            invoice_meta.update(m)
+            return m
 
+        def _payment(p):
+            wrong = round(invoice_meta.get("montant_ttc", 1000) * random.uniform(0.5, 0.9), 2)
+            return self._payments.create(company, client, p,
+                                         invoice_id=invoice_meta.get("invoice_id"), montant=wrong)
 
-def _revenus_sous_declares(company, client, fake, output_dir, noise_level):
-    """URSSAF declaration CA is significantly lower than actual invoiced amount."""
-    invoice_meta = {}
+        self._write_scenario("montant_paiement_incorrect",
+            self._scenario_meta("montant_paiement_incorrect",
+                "Le montant du paiement ne correspond pas au TTC de la facture.",
+                ["payment_amount_mismatch"], "medium"),
+            [
+                ("invoice", _invoice),
+                ("payment", _payment),
+                ("attestation_siret", lambda p: self._attestation_siret.create(company, p)),
+            ])
 
-    def _facture(p):
-        m = generate_facture(company, client, fake, p, statut_paiement="paid")
-        invoice_meta.update(m)
-        return m
-
-    def _declaration(p):
-        real_ht = invoice_meta.get("montant_ht", 10000)
-        declared = round(real_ht * random.uniform(0.3, 0.6), 2)
-        return generate_urssaf_declaration(company, fake, p, chiffre_affaires=declared)
-
-    generators = [
-        ("invoice", _facture),
-        ("urssaf_declaration", _declaration),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-    ]
-
-    _write_scenario(output_dir, "revenus_sous_declares", {
-        "scenario_type": "revenus_sous_declares",
-        "description": "Le CA déclaré à l'URSSAF est inférieur au montant HT facturé.",
-        "expected_anomalies": ["undeclared_revenue"],
-        "risk_level": "high",
-    }, generators, noise_level)
-
-
-def _incoherence_tva(company, client, fake, output_dir, noise_level):
-    """TVA amount on invoice doesn't match rate * HT."""
-    wrong_tva = round(random.uniform(500, 2000), 2)
-
-    generators = [
-        ("invoice", lambda p: generate_facture(company, client, fake, p, override_tva=wrong_tva)),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-    ]
-
-    _write_scenario(output_dir, "incoherence_tva", {
-        "scenario_type": "incoherence_tva",
-        "description": "Le montant de TVA ne correspond pas au taux appliqué sur le HT.",
-        "expected_anomalies": ["tva_mismatch"],
-        "risk_level": "medium",
-    }, generators, noise_level)
-
-
-def _attestation_expiree(company, client, fake, output_dir, noise_level):
-    """Expired URSSAF attestation."""
-    generators = [
-        ("invoice", lambda p: generate_facture(company, client, fake, p)),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-        ("attestation_urssaf", lambda p: generate_attestation_urssaf_expired(company, fake, p)),
-        ("kbis", lambda p: generate_kbis(company, fake, p)),
-    ]
-
-    _write_scenario(output_dir, "attestation_expiree", {
-        "scenario_type": "attestation_expiree",
-        "description": "L'attestation URSSAF est expirée.",
-        "expected_anomalies": ["expired_attestation"],
-        "risk_level": "high",
-    }, generators, noise_level)
-
-
-def _paiement_sans_facture(company, client, fake, output_dir, noise_level):
-    """Payment references a non-existent invoice."""
-    generators = [
-        ("payment", lambda p: generate_payment(company, client, fake, p,
-                                                invoice_id="F-0000-0000")),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-    ]
-
-    _write_scenario(output_dir, "paiement_sans_facture", {
-        "scenario_type": "paiement_sans_facture",
-        "description": "Un paiement référence une facture inexistante.",
-        "expected_anomalies": ["orphan_payment"],
-        "risk_level": "medium",
-    }, generators, noise_level)
+    def generate_all(self, company: CompanyIdentity, client: CompanyIdentity,
+                     company_factory: CompanyFactory) -> None:
+        self.happy_path(company, client)
+        self.missing_payment(company, client)
+        self.mauvais_siret(company, client, company_factory)
+        self.revenus_sous_declares(company, client)
+        self.incoherence_tva(company, client)
+        self.attestation_expiree(company, client)
+        self.paiement_sans_facture(company, client)
+        self.montant_paiement_incorrect(company, client)
 
 
-def _montant_paiement_incorrect(company, client, fake, output_dir, noise_level):
-    """Payment amount doesn't match invoice TTC."""
-    invoice_meta = {}
+def _print_summary(output_dir: str, company: CompanyIdentity, client: CompanyIdentity,
+                   noise_level: NoiseLevel) -> None:
+    print(f"Company: {company.name} (SIRET {company.siret})")
+    print(f"Client : {client.name}")
+    print(f"Noise  : {noise_level}")
+    print(f"Output : {output_dir}/")
+    folders = sorted(d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d)))
+    for f in folders:
+        with open(os.path.join(output_dir, f, "metadata.json")) as fh:
+            meta = json.load(fh)
+        anomalies = meta.get("expected_anomalies", [])
+        risk = meta.get("risk_level", "?")
+        tag = "OK" if not anomalies else ", ".join(anomalies)
+        print(f"  {f}/ [{risk}] — {tag}")
 
-    def _facture(p):
-        m = generate_facture(company, client, fake, p, statut_paiement="paid")
-        invoice_meta.update(m)
-        return m
-
-    def _payment(p):
-        wrong_amount = round(invoice_meta.get("montant_ttc", 1000) * random.uniform(0.5, 0.9), 2)
-        return generate_payment(company, client, fake, p,
-                                invoice_id=invoice_meta.get("invoice_id"),
-                                montant=wrong_amount)
-
-    generators = [
-        ("invoice", _facture),
-        ("payment", _payment),
-        ("attestation_siret", lambda p: generate_attestation_siret(company, fake, p)),
-    ]
-
-    _write_scenario(output_dir, "montant_paiement_incorrect", {
-        "scenario_type": "montant_paiement_incorrect",
-        "description": "Le montant du paiement ne correspond pas au TTC de la facture.",
-        "expected_anomalies": ["payment_amount_mismatch"],
-        "risk_level": "medium",
-    }, generators, noise_level)
-
-
-ALL_SCENARIOS = [
-    _happy_path,
-    _missing_payment,
-    _mauvais_siret,
-    _revenus_sous_declares,
-    _incoherence_tva,
-    _attestation_expiree,
-    _paiement_sans_facture,
-    _montant_paiement_incorrect,
-]
-
-
-# ── CLI ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Generate fake French business documents")
     parser.add_argument("--output", default="dataset/output", help="Output directory")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (default: random)")
+    parser.add_argument("--noise", default="none",
+                        choices=[level.value for level in NoiseLevel],
+                        help="Noise level for scan simulation (default: none)")
     args = parser.parse_args()
 
     seed = args.seed if args.seed is not None else random.randint(0, 999999)
@@ -264,29 +258,17 @@ def main():
     Faker.seed(seed)
     random.seed(seed)
 
-    company = generate_company(fake)
-    client = generate_company(fake)
-    noise_level = random.choice(["light", "medium", "heavy"])
+    noise_level = NoiseLevel(args.noise)
+    company_factory = CompanyFactory(fake)
+    company = company_factory.create()
+    client = company_factory.create()
 
     os.makedirs(args.output, exist_ok=True)
 
-    for scenario_fn in ALL_SCENARIOS:
-        scenario_fn(company, client, fake, args.output, noise_level)
+    generator = ScenarioGenerator(fake, args.output, noise_level)
+    generator.generate_all(company, client, company_factory)
 
-    # Summary
-    print(f"Company: {company.name} (SIRET {company.siret})")
-    print(f"Client : {client.name}")
-    print(f"Noise  : {noise_level}")
-    print(f"Output : {args.output}/")
-    folders = sorted(d for d in os.listdir(args.output) if os.path.isdir(os.path.join(args.output, d)))
-    for f in folders:
-        meta_path = os.path.join(args.output, f, "metadata.json")
-        with open(meta_path) as fh:
-            meta = json.load(fh)
-        anomalies = meta.get("expected_anomalies", [])
-        risk = meta.get("risk_level", "?")
-        tag = "OK" if not anomalies else ", ".join(anomalies)
-        print(f"  {f}/ [{risk}] — {tag}")
+    _print_summary(args.output, company, client, noise_level)
 
 
 if __name__ == "__main__":

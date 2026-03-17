@@ -95,6 +95,11 @@ class TestFull:
 
 
 class TestTypeAware:
+    def test_facture_extracts_invoice_id(self):
+        text = "FACTURE N° F-2025-0042 SIRET : 10433218196001"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["invoice_id"] == "F-2025-0042"
+
     def test_facture_remaps_siret(self):
         text = "SIRET : 10433218196001 Total HT : 100.00 €"
         fields = extract_fields(text, doc_type="facture")
@@ -111,6 +116,31 @@ class TestTypeAware:
         text = "SIRET : 10433218196001"
         fields = extract_fields(text)
         assert "siret" in fields
+
+
+class TestTvaRate:
+    def test_extracts_tva_rate(self):
+        text = "FACTURE TVA 20% : 200.00 € Total HT : 1000.00 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["tva_rate"] == "0.2"
+
+    def test_tva_rate_10(self):
+        text = "TVA 10% : 50.00 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["tva_rate"] == "0.1"
+
+
+class TestCleanAmount:
+    def test_ocr_thousands_separator(self):
+        """OCR may read 5,823.14 as 5.823.14 — extractor should handle it."""
+        text = "Chiffre d'affaires déclaré : 5.823.14 € Période : 2025-T1 Date de déclaration : 01/04/2025 SIRET : 12345678901234"
+        fields = extract_fields(text, doc_type="urssaf_declaration")
+        assert fields["chiffre_affaires_declare"] == "5823.14"
+
+    def test_normal_amount(self):
+        text = "Total HT : 1234.56 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["montant_ht"] == "1234.56"
 
 
 class TestPaymentExtraction:

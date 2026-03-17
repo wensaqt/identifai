@@ -9,6 +9,7 @@ from validator import validate_completeness, validate_document, validate_format
 class TestCompleteness:
     def test_complete_invoice(self):
         fields = {
+            "invoice_id": "F-2025-0001",
             "siret_emetteur": "12345678901234",
             "montant_ht": "100.00",
             "montant_ttc": "120.00",
@@ -20,6 +21,7 @@ class TestCompleteness:
         fields = {"siret_emetteur": "12345678901234"}
         issues = validate_completeness("facture", fields)
         missing = [i["field"] for i in issues]
+        assert "invoice_id" in missing
         assert "montant_ht" in missing
         assert "montant_ttc" in missing
         assert "date_emission" in missing
@@ -108,6 +110,7 @@ class TestFormat:
 class TestValidateDocument:
     def test_valid_document(self):
         fields = {
+            "invoice_id": "F-2025-0001",
             "siret_emetteur": "12345678901234",
             "montant_ht": "100.00",
             "montant_ttc": "120.00",
@@ -125,6 +128,7 @@ class TestValidateDocument:
 
     def test_bad_format_makes_invalid(self):
         fields = {
+            "invoice_id": "F-2025-0001",
             "siret_emetteur": "BAD",
             "montant_ht": "100.00",
             "montant_ttc": "120.00",
