@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from classifier import classify_document
@@ -5,6 +7,12 @@ from extractor import extract_fields
 from ocr import extract_text
 from validator import validate_document
 from verifier import verify_documents
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-5s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 app = FastAPI(title="IdentifAI API")
 
