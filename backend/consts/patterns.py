@@ -9,6 +9,7 @@ EXTRACT_MONTANT_HT = r"(?:total\s+HT|montant\s+HT|HT)\s*[:\-]?\s*([\d\s]+[.,]\d{
 EXTRACT_MONTANT_TTC = r"(?:total\s+TTC|montant\s+TTC|TTC)\s*[:\-]?\s*([\d\s]+[.,]\d{2})\s*[€E]?"
 EXTRACT_MONTANT_TVA = r"TVA\s+\d+%?\s*[:\-]?\s*([\d\s]+[.,]\d{2})\s*[€E]?"
 EXTRACT_MONTANT = r"[Mm]ontant\s*[:\-]?\s*([\d\s]+[.,]\d{2})\s*[€E]?"
+EXTRACT_INVOICE_ID = r"\b(F-\d{4}-\d{4})\b"
 EXTRACT_PAYMENT_ID = r"\b(PAY-\d{4}-\d{4})\b"
 EXTRACT_REFERENCE_FACTURE = r"[Rr][ée]f\.?\s*facture\s*[:\-]?\s*(F-\d{4}-\d{4})"
 EXTRACT_METHODE = r"[Mm][ée]thode\s*[:\-]?\s*(virement|pr[ée]l[èe]vement|ch[èe]que|carte\s+bancaire)"

@@ -72,7 +72,7 @@ class TestOcrEndpoint:
         mock_result = {
             "filename": "facture.pdf",
             "pages": 1,
-            "text": "FACTURE SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
+            "text": "FACTURE N° F-2025-0042 SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
             "pages_text": ["..."],
         }
         _ocr_mock.extract_text.return_value = mock_result

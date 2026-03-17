@@ -11,6 +11,7 @@ from consts.patterns import (
     EXTRACT_DATE,
     EXTRACT_DATE_DECLARATION,
     EXTRACT_IBAN,
+    EXTRACT_INVOICE_ID,
     EXTRACT_METHODE,
     EXTRACT_MONTANT,
     EXTRACT_MONTANT_HT,
@@ -53,6 +54,10 @@ class FieldExtractor:
         if len(sirets) > 1:
             result[F.SIRET_CLIENT] = sirets[1]
         return result
+
+    def get_invoice_id(self, text: str) -> dict:
+        iid = self._find(EXTRACT_INVOICE_ID, text)
+        return {F.INVOICE_ID: iid} if iid else {}
 
     def get_tva(self, text: str) -> dict:
         tva = self._find(EXTRACT_TVA, text)
@@ -147,8 +152,8 @@ class FieldExtractor:
 
     def _get_extractors(self, doc_type: str | None):
         type_map = {
-            DocType.FACTURE: [self.get_sirets, self.get_tva, self.get_montants, self.get_dates],
-            DocType.INVOICE: [self.get_sirets, self.get_tva, self.get_montants, self.get_dates],
+            DocType.FACTURE: [self.get_invoice_id, self.get_sirets, self.get_tva, self.get_montants, self.get_dates],
+            DocType.INVOICE: [self.get_invoice_id, self.get_sirets, self.get_tva, self.get_montants, self.get_dates],
             DocType.DEVIS: [self.get_sirets, self.get_tva, self.get_montants, self.get_dates],
             DocType.ATTESTATION_SIRET: [self.get_sirets, self.get_dates],
             DocType.ATTESTATION_URSSAF: [self.get_sirets, self.get_dates],

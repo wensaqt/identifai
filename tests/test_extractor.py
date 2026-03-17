@@ -95,6 +95,11 @@ class TestFull:
 
 
 class TestTypeAware:
+    def test_facture_extracts_invoice_id(self):
+        text = "FACTURE N° F-2025-0042 SIRET : 10433218196001"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["invoice_id"] == "F-2025-0042"
+
     def test_facture_remaps_siret(self):
         text = "SIRET : 10433218196001 Total HT : 100.00 €"
         fields = extract_fields(text, doc_type="facture")

@@ -29,7 +29,7 @@ class DocumentFields:
 class InvoiceFields(DocumentFields):
     DOC_TYPE: ClassVar[str] = DocType.INVOICE
     REQUIRED_FIELDS: ClassVar[list[str]] = [
-        F.SIRET_EMETTEUR, F.MONTANT_HT, F.MONTANT_TTC, F.DATE_EMISSION,
+        F.INVOICE_ID, F.SIRET_EMETTEUR, F.MONTANT_HT, F.MONTANT_TTC, F.DATE_EMISSION,
     ]
     siret_emetteur: Optional[str] = None
     nom_emetteur: Optional[str] = None

@@ -27,6 +27,7 @@ class TestToDict:
 class TestMissingFields:
     def test_all_present(self):
         f = InvoiceFields(
+            invoice_id="F-2025-0001",
             siret_emetteur="12345678901234",
             montant_ht="100.00",
             montant_ttc="120.00",
@@ -37,6 +38,7 @@ class TestMissingFields:
     def test_some_missing(self):
         f = InvoiceFields(siret_emetteur="12345678901234")
         missing = f.missing_fields()
+        assert "invoice_id" in missing
         assert "montant_ht" in missing
         assert "montant_ttc" in missing
         assert "date_emission" in missing
