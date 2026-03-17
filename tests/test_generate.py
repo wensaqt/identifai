@@ -27,6 +27,13 @@ def _run(monkeypatch, extra_args=None):
     return outdir
 
 
+def _meta(outdir, scenario):
+    with open(os.path.join(outdir, scenario, "metadata.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ── Structural tests ──────────────────────────────────────────────────────────
+
 def test_generate_creates_all_scenario_folders(monkeypatch):
     outdir = _run(monkeypatch)
     subdirs = sorted(d for d in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, d)))
@@ -36,113 +43,159 @@ def test_generate_creates_all_scenario_folders(monkeypatch):
     shutil.rmtree(outdir)
 
 
-def test_happy_path_has_all_docs_and_no_anomalies(monkeypatch):
+def test_all_scenarios_have_metadata_schema(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "happy_path", "metadata.json")) as f:
-        meta = json.load(f)
-    assert meta["scenario_type"] == "happy_path"
-    assert meta["expected_anomalies"] == []
-    assert meta["risk_level"] == "low"
-    doc_types = {d["type"] for d in meta["documents"]}
-    assert "invoice" in doc_types
-    assert "payment" in doc_types
-    assert "urssaf_declaration" in doc_types
+    for name in EXPECTED_SCENARIOS:
+        meta = _meta(outdir, name)
+        assert "scenario_name" in meta
+        assert "description" in meta
+        assert "risk_level" in meta
+        assert "noise_level" in meta
+        assert "generated_documents" in meta
+        assert "anomalies_expected" in meta
+        assert "financial_summary" in meta
+        assert "relations" in meta
     shutil.rmtree(outdir)
 
 
 def test_default_noise_is_none(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "happy_path", "metadata.json")) as f:
-        meta = json.load(f)
+    meta = _meta(outdir, "happy_path")
     assert meta["noise_level"] == "none"
     shutil.rmtree(outdir)
 
 
 def test_noise_flag_applies(monkeypatch):
     outdir = _run(monkeypatch, ["--noise", "medium"])
-    with open(os.path.join(outdir, "happy_path", "metadata.json")) as f:
-        meta = json.load(f)
+    meta = _meta(outdir, "happy_path")
     assert meta["noise_level"] == "medium"
     shutil.rmtree(outdir)
 
 
+# ── Happy path ────────────────────────────────────────────────────────────────
+
+def test_happy_path_has_all_docs_and_no_anomalies(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "happy_path")
+    assert meta["scenario_name"] == "happy_path"
+    assert meta["anomalies_expected"] == []
+    assert meta["risk_level"] == "low"
+    doc_types = {d["doc_type"] for d in meta["generated_documents"]}
+    assert "invoice" in doc_types
+    assert "payment" in doc_types
+    assert "urssaf_declaration" in doc_types
+    shutil.rmtree(outdir)
+
+
+def test_happy_path_has_invoice_to_payment_relation(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "happy_path")
+    assert "invoice_to_payment" in meta["relations"]
+    rel = meta["relations"]["invoice_to_payment"]
+    assert rel["invoice_id"] is not None
+    assert rel["payment_id"] is not None
+    shutil.rmtree(outdir)
+
+
+def test_happy_path_financial_summary_complete(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "happy_path")
+    fs = meta["financial_summary"]
+    assert fs["montant_ht"] is not None
+    assert fs["montant_ttc"] is not None
+    assert fs["montant_paiement"] is not None
+    shutil.rmtree(outdir)
+
+
+# ── Scenario-specific tests ───────────────────────────────────────────────────
+
 def test_missing_payment_has_no_payment_doc(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "missing_payment", "metadata.json")) as f:
-        meta = json.load(f)
-    doc_types = {d["type"] for d in meta["documents"]}
+    meta = _meta(outdir, "missing_payment")
+    doc_types = {d["doc_type"] for d in meta["generated_documents"]}
     assert "payment" not in doc_types
-    assert "missing_payment" in meta["expected_anomalies"]
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "missing_payment" in anomaly_types
+    shutil.rmtree(outdir)
+
+
+def test_missing_payment_invoice_is_paid(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "missing_payment")
+    invoice = next(d for d in meta["generated_documents"] if d["doc_type"] == "invoice")
+    assert invoice["fields"]["statut_paiement"] == "paid"
     shutil.rmtree(outdir)
 
 
 def test_mauvais_siret_has_mismatch(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "mauvais_siret", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "siret_mismatch" in meta["expected_anomalies"]
-    assert meta["bad_siret"] != meta["expected_siret"]
+    meta = _meta(outdir, "mauvais_siret")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "siret_mismatch" in anomaly_types
+    detail = next(a for a in meta["anomalies_expected"] if a["type"] == "siret_mismatch")
+    assert detail["details"]["bad_siret"] != detail["details"]["expected_siret"]
     shutil.rmtree(outdir)
 
 
 def test_revenus_sous_declares(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "revenus_sous_declares", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "undeclared_revenue" in meta["expected_anomalies"]
-    invoice = next(d for d in meta["documents"] if d["type"] == "invoice")
-    decl = next(d for d in meta["documents"] if d["type"] == "urssaf_declaration")
-    assert decl["chiffre_affaires_declare"] < invoice["montant_ht"]
+    meta = _meta(outdir, "revenus_sous_declares")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "undeclared_revenue" in anomaly_types
+    detail = next(a for a in meta["anomalies_expected"] if a["type"] == "undeclared_revenue")
+    assert detail["details"]["declared_ca"] < detail["details"]["expected_ca"]
     shutil.rmtree(outdir)
 
 
 def test_incoherence_tva(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "incoherence_tva", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "tva_mismatch" in meta["expected_anomalies"]
-    invoice = next(d for d in meta["documents"] if d["type"] == "invoice")
-    expected_tva = round(invoice["montant_ht"] * invoice["tva_rate"], 2)
-    assert invoice["montant_tva"] != expected_tva
+    meta = _meta(outdir, "incoherence_tva")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "tva_mismatch" in anomaly_types
+    detail = next(a for a in meta["anomalies_expected"] if a["type"] == "tva_mismatch")
+    assert detail["details"]["declared_tva"] != detail["details"]["expected_tva"]
     shutil.rmtree(outdir)
 
 
 def test_attestation_expiree(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "attestation_expiree", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "expired_attestation" in meta["expected_anomalies"]
+    meta = _meta(outdir, "attestation_expiree")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "expired_attestation" in anomaly_types
+    detail = next(a for a in meta["anomalies_expected"] if a["type"] == "expired_attestation")
+    assert detail["details"]["date_expiration"] is not None
     shutil.rmtree(outdir)
 
 
 def test_paiement_sans_facture(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "paiement_sans_facture", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "orphan_payment" in meta["expected_anomalies"]
-    payment = next(d for d in meta["documents"] if d["type"] == "payment")
-    assert payment["reference_facture"] == "F-0000-0000"
+    meta = _meta(outdir, "paiement_sans_facture")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "orphan_payment" in anomaly_types
+    payment = next(d for d in meta["generated_documents"] if d["doc_type"] == "payment")
+    assert payment["fields"]["reference_facture"] == "F-0000-0000"
     shutil.rmtree(outdir)
 
 
 def test_montant_paiement_incorrect(monkeypatch):
     outdir = _run(monkeypatch)
-    with open(os.path.join(outdir, "montant_paiement_incorrect", "metadata.json")) as f:
-        meta = json.load(f)
-    assert "payment_amount_mismatch" in meta["expected_anomalies"]
-    invoice = next(d for d in meta["documents"] if d["type"] == "invoice")
-    payment = next(d for d in meta["documents"] if d["type"] == "payment")
-    assert payment["montant"] != invoice["montant_ttc"]
+    meta = _meta(outdir, "montant_paiement_incorrect")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "payment_amount_mismatch" in anomaly_types
+    detail = next(a for a in meta["anomalies_expected"] if a["type"] == "payment_amount_mismatch")
+    assert detail["details"]["montant_paiement"] != detail["details"]["montant_facture"]
     shutil.rmtree(outdir)
 
 
-def test_all_scenarios_have_metadata_schema(monkeypatch):
+# ── Document records ──────────────────────────────────────────────────────────
+
+def test_each_document_record_has_required_keys(monkeypatch):
     outdir = _run(monkeypatch)
     for name in EXPECTED_SCENARIOS:
-        with open(os.path.join(outdir, name, "metadata.json")) as f:
-            meta = json.load(f)
-        assert "scenario_type" in meta
-        assert "description" in meta
-        assert "expected_anomalies" in meta
-        assert "risk_level" in meta
+        meta = _meta(outdir, name)
+        for doc in meta["generated_documents"]:
+            assert "doc_id" in doc, f"{name}: missing doc_id"
+            assert "doc_type" in doc, f"{name}: missing doc_type"
+            assert "filename" in doc, f"{name}: missing filename"
+            assert "fields" in doc, f"{name}: missing fields"
     shutil.rmtree(outdir)

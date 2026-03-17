@@ -4,6 +4,9 @@ import logging
 from datetime import datetime
 
 from consts.doc_types import ATTESTATION_TYPES, INVOICE_TYPES, DocType
+
+# Devis are quotes, not revenue — excluded from URSSAF CA check
+_REVENUE_TYPES = {DocType.FACTURE, DocType.INVOICE}
 from consts.fields import FieldName as F
 
 logger = logging.getLogger(__name__)
@@ -86,7 +89,9 @@ class DocumentVerifier:
 
     def _sum_invoiced_ht(self, documents: list[dict]) -> float:
         total = 0.0
-        for doc in self._get_invoices(documents):
+        for doc in documents:
+            if self._get_doc_type(doc) not in _REVENUE_TYPES:
+                continue
             ht = self._safe_float(self._get_field(doc, F.MONTANT_HT))
             if ht:
                 total += ht
