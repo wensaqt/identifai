@@ -4,12 +4,12 @@ import logging
 from datetime import datetime
 
 from consts.doc_types import ATTESTATION_TYPES, INVOICE_TYPES, DocType
-
-# Devis are quotes, not revenue — excluded from URSSAF CA check
-_REVENUE_TYPES = {DocType.FACTURE, DocType.INVOICE}
 from consts.fields import FieldName as F
 
 logger = logging.getLogger(__name__)
+
+# Devis are quotes, not revenue — excluded from URSSAF CA check
+_REVENUE_TYPES = {DocType.FACTURE, DocType.INVOICE}
 
 _DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y")
 _TVA_TOLERANCE = 0.02
