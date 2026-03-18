@@ -1,13 +1,12 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-
 from classifier import classify_document
 from consts.process import ProcessStatus, ProcessType
 from consts.process_definitions import PROCESS_DEFINITIONS
 from db import ProcessRepository
 from extractor import extract_fields
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from ocr import extract_text
 from process_runner import ProcessRunner
 from validator import validate_document
@@ -29,7 +28,9 @@ _runner = ProcessRunner(repo=_repo)
 
 def _validate_upload(file: UploadFile, file_bytes: bytes) -> None:
     if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported file type: {file.content_type}"
+        )
     if len(file_bytes) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="File exceeds 20 MB limit")
 
@@ -49,16 +50,37 @@ def health():
 
 # ── Process CRUD ─────────────────────────────────────────────────────────────
 
+
 @app.post("/analyze")
 async def analyze(files: list[UploadFile] = File(...)):
     """Full pipeline: OCR + classify + extract + validate + verify → Process."""
-    documents = []
+    definition = PROCESS_DEFINITIONS[ProcessType.SUPPLIER_COMPLIANCE]
+
+    # Phase 1 : OCR + classify (léger) pour vérifier la complétude
+    classified = []
     for file in files:
         file_bytes = await file.read()
         _validate_upload(file, file_bytes)
-        documents.append(_process_document(file_bytes, file.filename))
+        result = extract_text(file_bytes, file.filename)
+        result["doc_type"] = classify_document(result["text"])
+        classified.append((result, file_bytes))
 
-    definition = PROCESS_DEFINITIONS[ProcessType.CONFORMITE_FOURNISSEUR]
+    provided = {r["doc_type"] for r, _ in classified}
+    missing = sorted(definition.required_doc_types - provided)
+    if missing:
+        raise HTTPException(status_code=400, detail={
+            "error": "missing_documents",
+            "missing": missing,
+            "message": f"Documents manquants : {', '.join(missing)}",
+        })
+
+    # Phase 2 : extraction + validation + vérification
+    documents = []
+    for result, _ in classified:
+        result["fields"] = extract_fields(result["text"], result["doc_type"])
+        result["validation"] = validate_document(result["doc_type"], result["fields"])
+        documents.append(result)
+
     process = _runner.run(documents, definition)
     return process.to_dict()
 
@@ -87,13 +109,31 @@ async def update_process(process_id: str, files: list[UploadFile] = File(...)):
     if process.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Cannot update a cancelled process")
 
-    documents = []
+    definition = PROCESS_DEFINITIONS[ProcessType(process.type)]
+
+    classified = []
     for file in files:
         file_bytes = await file.read()
         _validate_upload(file, file_bytes)
-        documents.append(_process_document(file_bytes, file.filename))
+        result = extract_text(file_bytes, file.filename)
+        result["doc_type"] = classify_document(result["text"])
+        classified.append(result)
 
-    definition = PROCESS_DEFINITIONS[ProcessType(process.type)]
+    provided = {r["doc_type"] for r in classified}
+    missing = sorted(definition.required_doc_types - provided)
+    if missing:
+        raise HTTPException(status_code=400, detail={
+            "error": "missing_documents",
+            "missing": missing,
+            "message": f"Documents manquants : {', '.join(missing)}",
+        })
+
+    documents = []
+    for result in classified:
+        result["fields"] = extract_fields(result["text"], result["doc_type"])
+        result["validation"] = validate_document(result["doc_type"], result["fields"])
+        documents.append(result)
+
     updated = _runner.rerun(process, documents, definition)
     return updated.to_dict()
 
@@ -116,6 +156,7 @@ def cancel_process(process_id: str):
 
 # ── Single-file & verify ─────────────────────────────────────────────────────
 
+
 @app.post("/ocr")
 async def ocr(file: UploadFile = File(...)):
     """Single file: OCR + classify + extract + validate."""
@@ -127,6 +168,6 @@ async def ocr(file: UploadFile = File(...)):
 @app.post("/verify")
 async def verify(documents: list[dict]):
     """Cross-document verification on pre-processed results → Process."""
-    definition = PROCESS_DEFINITIONS[ProcessType.CONFORMITE_FOURNISSEUR]
+    definition = PROCESS_DEFINITIONS[ProcessType.SUPPLIER_COMPLIANCE]
     process = _runner.run_verify_only(documents, definition)
     return process.to_dict()

@@ -4,10 +4,12 @@ import logging
 import re
 
 from consts.doc_types import DocType
+from models import DOC_TYPE_MODELS
 from consts.fields import FieldName as F
 from consts.patterns import (
     EXTRACT_BIC,
     EXTRACT_CA_DECLARE,
+    EXTRACT_COMPANY_NAME,
     EXTRACT_DATE,
     EXTRACT_DATE_DECLARATION,
     EXTRACT_IBAN,
@@ -20,6 +22,7 @@ from consts.patterns import (
     EXTRACT_PAYMENT_ID,
     EXTRACT_PERIODE,
     EXTRACT_REFERENCE_FACTURE,
+    EXTRACT_SIREN,
     EXTRACT_SIRET,
     EXTRACT_TVA,
     EXTRACT_TVA_RATE,
@@ -29,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 class FieldExtractor:
-
     # ── Helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -69,9 +71,17 @@ class FieldExtractor:
             result[F.SIRET_CLIENT] = sirets[1]
         return result
 
+    def get_siren(self, text: str) -> dict:
+        siren = self._find(EXTRACT_SIREN, text)
+        return {F.SIREN: siren} if siren else {}
+
     def get_tva(self, text: str) -> dict:
         tva = self._find(EXTRACT_TVA, text)
         return {F.TVA: tva} if tva else {}
+
+    def get_company_name(self, text: str) -> dict:
+        company_name = self._find(EXTRACT_COMPANY_NAME, text)
+        return {F.COMPANY_NAME: company_name} if company_name else {}
 
     def get_iban(self, text: str) -> dict:
         iban = self._find(EXTRACT_IBAN, text)
@@ -107,11 +117,16 @@ class FieldExtractor:
         return {F.MONTANT: val} if val else {}
 
     def get_date_emission(self, text: str) -> dict:
-        d = self._find(rf"(?:date|[ée]mission|inscription|le)\s*[:\-]?\s*({EXTRACT_DATE})", text)
+        d = self._find(
+            rf"(?:date|[ée]mission|inscription|le)\s*[:\-]?\s*({EXTRACT_DATE})", text
+        )
         return {F.DATE_EMISSION: d} if d else {}
 
     def get_date_expiration(self, text: str) -> dict:
-        d = self._find(rf"(?:expir(?:ation|e)|validit[eé]|valable jusqu)\S*\s*[:\-]?\s*({EXTRACT_DATE})", text)
+        d = self._find(
+            rf"(?:expir(?:ation|e)|validit[eé]|valable jusqu)\S*\s*[:\-]?\s*({EXTRACT_DATE})",
+            text,
+        )
         return {F.DATE_EXPIRATION: d} if d else {}
 
     def get_date_delivrance(self, text: str) -> dict:
@@ -150,15 +165,6 @@ class FieldExtractor:
         val = self._find_amount(EXTRACT_CA_DECLARE, text)
         return {F.CHIFFRE_AFFAIRES_DECLARE: val} if val else {}
 
-    # ── Remapping ────────────────────────────────────────────────────────
-
-    _SIRET_REMAP_TYPES = {DocType.FACTURE, DocType.INVOICE, DocType.DEVIS}
-
-    def _remap_fields(self, fields: dict, doc_type: str) -> dict:
-        if doc_type in self._SIRET_REMAP_TYPES and F.SIRET in fields:
-            fields[F.SIRET_EMETTEUR] = fields.pop(F.SIRET)
-        return fields
-
     # ── Dispatch ─────────────────────────────────────────────────────────
 
     _TYPE_EXTRACTORS = None
@@ -166,49 +172,98 @@ class FieldExtractor:
     def _get_type_map(self) -> dict:
         if self._TYPE_EXTRACTORS is None:
             self._TYPE_EXTRACTORS = {
-                DocType.FACTURE: self._invoice_extractors(),
                 DocType.INVOICE: self._invoice_extractors(),
-                DocType.DEVIS: self._devis_extractors(),
-                DocType.ATTESTATION_SIRET: [self.get_siret, self.get_date_emission],
-                DocType.ATTESTATION_URSSAF: [self.get_siret, self.get_date_expiration, self.get_date_delivrance],
-                DocType.KBIS: [self.get_siret, self.get_date_emission],
-                DocType.RIB: [self.get_iban, self.get_bic],
+                DocType.QUOTE: self._quote_extractors(),
+                DocType.SIRET_CERTIFICATE: self._siret_extractors(),
+                DocType.URSSAF_CERTIFICATE: self._urssaf_certificate_extractors(),
+                DocType.COMPANY_REGISTRATION: self._company_registration_extractors(),
+                DocType.BANK_ACCOUNT_DETAILS: self._bank_account_details_extractors(),
                 DocType.PAYMENT: self._payment_extractors(),
                 DocType.URSSAF_DECLARATION: self._declaration_extractors(),
             }
         return self._TYPE_EXTRACTORS
 
-    def _invoice_extractors(self):
+    def _urssaf_certificate_extractors(self):
         return [
-            self.get_invoice_id, self.get_siret, self.get_tva, self.get_tva_rate,
-            self.get_montant_ht, self.get_montant_ttc, self.get_montant_tva,
-            self.get_date_emission, self.get_date_prestation,
+            self.get_siret,
+            self.get_date_expiration,
+            self.get_date_delivrance,
         ]
 
-    def _devis_extractors(self):
+    def _company_registration_extractors(self):
         return [
-            self.get_siret, self.get_tva,
-            self.get_montant_ht, self.get_montant_ttc,
-            self.get_date_emission, self.get_date_expiration,
+            self.get_siret,
+            self.get_siren,
+            self.get_date_emission,
+            self.get_company_name,
+        ]
+
+    def _siret_extractors(self):
+        return [self.get_siret, self.get_date_emission]
+
+    def _bank_account_details_extractors(self):
+        return [self.get_iban, self.get_bic]
+
+    def get_invoice_siret(self, text: str) -> dict:
+        """For invoices: remap siret → siret_emetteur."""
+        raw = self.get_siret(text)
+        result = {}
+        if F.SIRET in raw:
+            result[F.SIRET_EMETTEUR] = raw[F.SIRET]
+        if F.SIRET_CLIENT in raw:
+            result[F.SIRET_CLIENT] = raw[F.SIRET_CLIENT]
+        return result
+
+    def _invoice_extractors(self):
+        return [
+            self.get_invoice_id,
+            self.get_invoice_siret,
+            self.get_tva,
+            self.get_tva_rate,
+            self.get_montant_ht,
+            self.get_montant_ttc,
+            self.get_montant_tva,
+            self.get_date_emission,
+            self.get_date_prestation,
+        ]
+
+    def _quote_extractors(self):
+        return [
+            self.get_invoice_siret,
+            self.get_tva,
+            self.get_montant_ht,
+            self.get_montant_ttc,
+            self.get_date_emission,
+            self.get_date_expiration,
         ]
 
     def _payment_extractors(self):
         return [
-            self.get_payment_id, self.get_reference_facture,
-            self.get_montant, self.get_date_paiement, self.get_methode,
+            self.get_payment_id,
+            self.get_reference_facture,
+            self.get_montant,
+            self.get_date_paiement,
+            self.get_methode,
         ]
 
     def _declaration_extractors(self):
         return [
-            self.get_siret, self.get_periode,
-            self.get_chiffre_affaires, self.get_date_declaration,
+            self.get_siret,
+            self.get_periode,
+            self.get_chiffre_affaires,
+            self.get_date_declaration,
         ]
 
     def _fallback_extractors(self):
         return [
-            self.get_siret, self.get_tva, self.get_iban, self.get_bic,
-            self.get_montant_ht, self.get_montant_ttc,
-            self.get_date_emission, self.get_date_expiration,
+            self.get_siret,
+            self.get_tva,
+            self.get_iban,
+            self.get_bic,
+            self.get_montant_ht,
+            self.get_montant_ttc,
+            self.get_date_emission,
+            self.get_date_expiration,
         ]
 
     def _get_extractors(self, doc_type: str | None):
@@ -220,9 +275,12 @@ class FieldExtractor:
         fields: dict = {}
         for extractor in self._get_extractors(doc_type):
             fields.update(extractor(text))
-        if doc_type:
-            fields = self._remap_fields(fields, doc_type)
-        logger.info("[EXTRACT] %d champs extraits (doc_type=%s)", len(fields), doc_type)
+        logger.info("[EXTRACT] doc_type=%s fields=%s", doc_type, fields)
+        model_cls = DOC_TYPE_MODELS.get(doc_type) if doc_type else None
+        if model_cls:
+            missing = [f for f in model_cls.REQUIRED_FIELDS if not fields.get(f)]
+            if missing:
+                logger.warning("[EXTRACT] doc_type=%s missing_fields=%s", doc_type, missing)
         return fields
 
 

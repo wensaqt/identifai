@@ -5,10 +5,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from models import (
     DOC_TYPE_MODELS,
-    AttestationUrssafFields,
+    BankAccountDetailsFields,
     InvoiceFields,
     PaymentFields,
-    RibFields,
+    UrssafCertificateFields,
     UrssafDeclarationFields,
 )
 
@@ -20,7 +20,7 @@ class TestToDict:
         assert d == {"siret_emetteur": "12345678901234", "montant_ht": "100.00"}
 
     def test_empty(self):
-        f = RibFields()
+        f = BankAccountDetailsFields()
         assert f.to_dict() == {}
 
 
@@ -44,12 +44,12 @@ class TestMissingFields:
         assert "date_emission" in missing
         assert "siret_emetteur" not in missing
 
-    def test_rib_missing_iban(self):
-        f = RibFields(bic="BNPAFRPP")
+    def test_bank_account_missing_iban(self):
+        f = BankAccountDetailsFields(bic="BNPAFRPP")
         assert f.missing_fields() == ["iban"]
 
-    def test_attestation_urssaf(self):
-        f = AttestationUrssafFields(siret="12345678901234")
+    def test_urssaf_certificate(self):
+        f = UrssafCertificateFields(siret="12345678901234")
         assert f.missing_fields() == ["date_expiration"]
 
     def test_payment(self):
@@ -65,13 +65,13 @@ class TestMissingFields:
 
 
 class TestRegistry:
-    def test_facture_maps_to_invoice(self):
-        assert DOC_TYPE_MODELS["facture"] is InvoiceFields
+    def test_invoice_maps_correctly(self):
         assert DOC_TYPE_MODELS["invoice"] is InvoiceFields
 
     def test_all_types_registered(self):
         expected = {
-            "facture", "invoice", "devis", "attestation_siret",
-            "attestation_urssaf", "kbis", "rib", "payment", "urssaf_declaration",
+            "invoice", "quote", "siret_certificate",
+            "urssaf_certificate", "company_registration",
+            "bank_account_details", "payment", "urssaf_declaration",
         }
         assert set(DOC_TYPE_MODELS.keys()) == expected
