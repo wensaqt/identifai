@@ -18,6 +18,9 @@ if "results" not in st.session_state:
     st.session_state.results = None
 if "active_dossier" not in st.session_state:
     st.session_state.active_dossier = None
+if "original_files" not in st.session_state:
+    # dict {filename: (name, bytes, mime)} — permet de relancer avec corrections
+    st.session_state.original_files = {}
 
 # ── Dossiers métier ───────────────────────────────────────────────────────────
 # Chaque dossier correspond à un ProcessType côté backend.
@@ -265,10 +268,15 @@ else:
                         resp = requests.post(f"{BACKEND_URL}/analyze", files=multipart, timeout=120)
                         if resp.status_code == 200:
                             payload = resp.json()
+                            # Stocker les fichiers originaux pour permettre les corrections
+                            st.session_state.original_files = {
+                                name: (name, content, mime)
+                                for name, content, mime in files_data
+                            }
                             st.session_state.results = {
-                                "process": payload,
                                 "documents": payload.get("documents", []),
                                 "issues": payload.get("anomalies", []),
+                                "status": payload.get("status", "valid"),
                                 "timestamp": datetime.now().strftime("%d/%m/%Y à %H:%M"),
                             }
                             st.rerun()
@@ -280,18 +288,18 @@ else:
     # ── Résultats ─────────────────────────────────────────────────────────────
     else:
         results_data = st.session_state.results
-        process = results_data.get("process", {})
         issues = results_data["issues"]
         documents = results_data["documents"]
-        process_status = process.get("status", "unknown")
+        process_status = results_data.get("status", "valid")
         errors = [i for i in issues if i["severity"] == "error"]
         warnings = [i for i in issues if i["severity"] == "warning"]
+        issue_files = {f for i in issues for f in i.get("document_refs", [])}
 
         # Bandeau de statut global
         if process_status == "error" or errors:
             st.error(
                 f"🚨 **{len(errors)} anomalie(s) bloquante(s) détectée(s)** — "
-                "Votre dossier nécessite des corrections avant validation."
+                "Corrigez les documents concernés et relancez l'analyse."
             )
         elif warnings:
             st.warning(
@@ -312,7 +320,6 @@ else:
 
         with col_issues:
             st.markdown("#### Résultat des contrôles")
-
             if not issues:
                 st.markdown("Aucun point de vigilance détecté.")
             else:
@@ -324,7 +331,6 @@ else:
                     badge = "badge-error" if issue["severity"] == "error" else "badge-warning"
                     level = "Bloquant" if issue["severity"] == "error" else "À vérifier"
                     files_str = ", ".join(issue.get("document_refs", []))
-
                     with st.container(border=True):
                         st.markdown(
                             f'<span class="{badge}">{level}</span> &nbsp; **{title}**',
@@ -337,45 +343,93 @@ else:
         with col_docs:
             st.markdown("#### Documents analysés")
 
-            issue_files = {f for i in issues for f in i.get("document_refs", [])}
+            FIELD_LABELS_MAP = {
+                "siret": "SIRET", "siret_emetteur": "SIRET émetteur", "siren": "SIREN",
+                "iban": "IBAN", "montant_ht": "Montant HT", "montant_ttc": "Montant TTC",
+                "montant_tva": "Montant TVA", "montant": "Montant", "tva_rate": "Taux TVA",
+                "date_emission": "Date d'émission", "date_expiration": "Date d'expiration",
+                "date_paiement": "Date de paiement", "invoice_id": "N° de facture",
+                "reference_facture": "Référence facture",
+                "chiffre_affaires_declare": "CA déclaré", "periode": "Période",
+            }
 
             for doc in documents:
                 filename = doc.get("filename", "?")
                 doc_type = doc.get("doc_type")
                 fields = doc.get("fields", {})
                 has_issue = filename in issue_files
-
                 icon = "🔴" if has_issue else "✅"
                 type_label = DOC_TYPE_LABELS.get(doc_type, "Document non reconnu")
 
-                with st.expander(f"{icon} {filename} — {type_label}"):
+                with st.expander(f"{icon} {filename} — {type_label}", expanded=has_issue):
                     if fields:
                         st.markdown("**Informations extraites**")
-                        field_labels_map = {
-                            "siret": "SIRET",
-                            "siret_emetteur": "SIRET émetteur",
-                            "siren": "SIREN",
-                            "iban": "IBAN",
-                            "montant_ht": "Montant HT",
-                            "montant_ttc": "Montant TTC",
-                            "montant_tva": "Montant TVA",
-                            "montant": "Montant",
-                            "tva_rate": "Taux TVA",
-                            "date_emission": "Date d'émission",
-                            "date_expiration": "Date d'expiration",
-                            "date_paiement": "Date de paiement",
-                            "invoice_id": "N° de facture",
-                            "reference_facture": "Référence facture",
-                            "chiffre_affaires_declare": "CA déclaré",
-                            "periode": "Période",
-                        }
                         for k, v in fields.items():
-                            label = field_labels_map.get(k, k)
-                            st.markdown(f"- **{label}** : `{v}`")
+                            st.markdown(f"- **{FIELD_LABELS_MAP.get(k, k)}** : `{v}`")
                     else:
                         st.caption("Aucun champ extrait.")
 
+                    # Uploader de correction si le document a un problème
+                    if has_issue:
+                        st.divider()
+                        st.markdown("**Corriger ce document**")
+                        corrected = st.file_uploader(
+                            "Déposer la version corrigée",
+                            type=["pdf", "jpg", "jpeg", "png"],
+                            key=f"fix_{filename}",
+                            label_visibility="collapsed",
+                        )
+                        if corrected:
+                            corrected.seek(0)
+                            st.session_state.original_files[filename] = (
+                                corrected.name, corrected.read(), corrected.type
+                            )
+                            st.success(f"✅ {corrected.name} prêt à être soumis")
+
+        # Bouton relancer si des corrections ont été uploadées
+        corrections_present = any(
+            st.session_state.original_files.get(doc.get("filename")) and
+            st.session_state.original_files[doc.get("filename")][0] != doc.get("filename")
+            for doc in documents if doc.get("filename") in issue_files
+        )
+
         st.divider()
-        if st.button("⬅️ Déposer un nouveau dossier", use_container_width=True):
-            st.session_state.results = None
-            st.rerun()
+        col_retry, col_new = st.columns(2)
+
+        with col_retry:
+            if issue_files and st.button(
+                "🔄 Relancer l'analyse avec les corrections",
+                type="primary",
+                use_container_width=True,
+            ):
+                files_data = list(st.session_state.original_files.values())
+                if not files_data:
+                    st.error("Aucun fichier disponible pour relancer l'analyse.")
+                else:
+                    with st.spinner("Nouvelle analyse en cours..."):
+                        multipart = [("files", t) for t in files_data]
+                        try:
+                            resp = requests.post(f"{BACKEND_URL}/analyze", files=multipart, timeout=120)
+                            if resp.status_code == 200:
+                                payload = resp.json()
+                                st.session_state.original_files = {
+                                    name: (name, content, mime)
+                                    for name, content, mime in files_data
+                                }
+                                st.session_state.results = {
+                                    "documents": payload.get("documents", []),
+                                    "issues": payload.get("anomalies", []),
+                                    "status": payload.get("status", "valid"),
+                                    "timestamp": datetime.now().strftime("%d/%m/%Y à %H:%M"),
+                                }
+                                st.rerun()
+                            else:
+                                st.error(f"Erreur : {resp.json().get('detail', 'Erreur inconnue')}")
+                        except Exception as e:
+                            st.error(f"Impossible de joindre le serveur : {e}")
+
+        with col_new:
+            if st.button("⬅️ Nouveau dossier", use_container_width=True):
+                st.session_state.results = None
+                st.session_state.original_files = {}
+                st.rerun()
