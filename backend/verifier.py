@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from consts.anomalies import AnomalyType, Severity
 from consts.doc_types import ATTESTATION_TYPES, INVOICE_TYPES, DocType
 from consts.fields import FieldName as F
 
@@ -24,11 +25,11 @@ def _issue(issue_type: str, severity: str, message: str, files: list[str]) -> di
 
 
 def _error(issue_type: str, message: str, files: list[str]) -> dict:
-    return _issue(issue_type, "error", message, files)
+    return _issue(issue_type, Severity.ERROR, message, files)
 
 
 def _warning(issue_type: str, message: str, files: list[str]) -> dict:
-    return _issue(issue_type, "warning", message, files)
+    return _issue(issue_type, Severity.WARNING, message, files)
 
 
 class DocumentVerifier:
@@ -112,7 +113,7 @@ class DocumentVerifier:
             return []
 
         files = self._files_with_siret(documents, mismatches)
-        return [_error("siret_mismatch",
+        return [_error(AnomalyType.SIRET_MISMATCH,
                        f"SIRET incohérent entre factures/devis et attestations : {', '.join(mismatches)}",
                        files)]
 
@@ -140,7 +141,7 @@ class DocumentVerifier:
         exp_date = self._parse_date(exp_str)
         if not exp_date or exp_date >= today:
             return None
-        return _error("expired_attestation",
+        return _error(AnomalyType.EXPIRED_ATTESTATION,
                       f"Attestation expirée depuis le {exp_str}",
                       [doc["filename"]])
 
@@ -161,7 +162,7 @@ class DocumentVerifier:
         expected = round(ht * rate, 2)
         if abs(tva - expected) <= _TVA_TOLERANCE:
             return None
-        return _warning("tva_mismatch",
+        return _warning(AnomalyType.TVA_MISMATCH,
                         f"TVA incohérente : {tva} vs attendu {expected} (HT={ht}, taux={rate})",
                         [doc["filename"]])
 
@@ -184,7 +185,7 @@ class DocumentVerifier:
             return None
         if abs(pay - ttc) <= _PAYMENT_TOLERANCE:
             return None
-        return _error("payment_amount_mismatch",
+        return _error(AnomalyType.PAYMENT_AMOUNT_MISMATCH,
                       f"Paiement {pay} != facture TTC {ttc} (réf {ref})",
                       [doc["filename"], invoice_index[ref]["filename"]])
 
@@ -194,7 +195,7 @@ class DocumentVerifier:
         for doc in self._get_payments(documents):
             ref = self._get_field(doc, F.REFERENCE_FACTURE)
             if ref and ref not in invoice_ids:
-                issues.append(_warning("orphan_payment",
+                issues.append(_warning(AnomalyType.ORPHAN_PAYMENT,
                                        f"Paiement référence une facture inexistante : {ref}",
                                        [doc["filename"]]))
         return issues
@@ -215,7 +216,7 @@ class DocumentVerifier:
             if not invoice_id:
                 continue
             if invoice_id not in payment_refs:
-                issues.append(_warning("missing_payment",
+                issues.append(_warning(AnomalyType.MISSING_PAYMENT,
                                        f"Aucun paiement trouvé pour la facture {invoice_id}",
                                        [doc["filename"]]))
         return issues
@@ -228,7 +229,7 @@ class DocumentVerifier:
         for doc in self._get_declarations(documents):
             declared = self._safe_float(self._get_field(doc, F.CHIFFRE_AFFAIRES_DECLARE))
             if declared is not None and declared < total_ht * _REVENUE_THRESHOLD:
-                issues.append(_warning("undeclared_revenue",
+                issues.append(_warning(AnomalyType.UNDECLARED_REVENUE,
                                        f"CA déclaré ({declared}) inférieur à 90% du HT facturé ({total_ht})",
                                        [doc["filename"]]))
         return issues

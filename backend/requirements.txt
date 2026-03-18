@@ -4,3 +4,4 @@ python-doctr[torch]
 PyMuPDF>=1.24
 Pillow>=10.0
 python-multipart>=0.0.9
+pymongo>=4.6

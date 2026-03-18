@@ -1,8 +1,26 @@
 services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   backend:
     build: ./backend
     ports:
       - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - MONGO_DB=identifai
+    depends_on:
+      mongo:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -23,6 +41,12 @@ services:
     build:
       context: .
       dockerfile: tests/Dockerfile
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - MONGO_DB=identifai_test
+    depends_on:
+      mongo:
+        condition: service_healthy
     profiles: ["test"]
 
   dataset:
@@ -33,3 +57,6 @@ services:
       - ./dataset/output:/app/dataset/output
     entrypoint: ["python", "-m", "dataset.generate"]
     profiles: ["dataset"]
+
+volumes:
+  mongo_data:

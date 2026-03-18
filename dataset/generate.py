@@ -20,9 +20,9 @@ def _print_summary(output_dir: str) -> None:
         with open(path, encoding="utf-8") as fh:
             meta = json.load(fh)
         anomalies = [a["type"] for a in meta.get("anomalies_expected", [])]
-        risk = meta.get("risk_level", "?")
+        status = meta.get("status", "?")
         tag = "OK" if not anomalies else ", ".join(anomalies)
-        print(f"  {name}/ [{risk}] — {tag}")
+        print(f"  {name}/ [{status}] — {tag}")
 
 
 def main() -> None:

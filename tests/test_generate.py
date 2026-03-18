@@ -43,18 +43,18 @@ def test_generate_creates_all_scenario_folders(monkeypatch):
     shutil.rmtree(outdir)
 
 
-def test_all_scenarios_have_metadata_schema(monkeypatch):
+def test_all_scenarios_have_process_record_schema(monkeypatch):
     outdir = _run(monkeypatch)
     for name in EXPECTED_SCENARIOS:
         meta = _meta(outdir, name)
+        assert "id" in meta
+        assert "type" in meta
         assert "scenario_name" in meta
-        assert "description" in meta
-        assert "risk_level" in meta
+        assert "status" in meta
         assert "noise_level" in meta
-        assert "generated_documents" in meta
+        assert "documents" in meta
         assert "anomalies_expected" in meta
-        assert "financial_summary" in meta
-        assert "relations" in meta
+        assert "created_at" in meta
     shutil.rmtree(outdir)
 
 
@@ -79,31 +79,12 @@ def test_happy_path_has_all_docs_and_no_anomalies(monkeypatch):
     meta = _meta(outdir, "happy_path")
     assert meta["scenario_name"] == "happy_path"
     assert meta["anomalies_expected"] == []
-    assert meta["risk_level"] == "low"
-    doc_types = {d["doc_type"] for d in meta["generated_documents"]}
+    assert meta["status"] == "valid"
+    assert meta["type"] == "conformite_fournisseur"
+    doc_types = {d["doc_type"] for d in meta["documents"]}
     assert "invoice" in doc_types
     assert "payment" in doc_types
     assert "urssaf_declaration" in doc_types
-    shutil.rmtree(outdir)
-
-
-def test_happy_path_has_invoice_to_payment_relation(monkeypatch):
-    outdir = _run(monkeypatch)
-    meta = _meta(outdir, "happy_path")
-    assert "invoice_to_payment" in meta["relations"]
-    rel = meta["relations"]["invoice_to_payment"]
-    assert rel["invoice_id"] is not None
-    assert rel["payment_id"] is not None
-    shutil.rmtree(outdir)
-
-
-def test_happy_path_financial_summary_complete(monkeypatch):
-    outdir = _run(monkeypatch)
-    meta = _meta(outdir, "happy_path")
-    fs = meta["financial_summary"]
-    assert fs["montant_ht"] is not None
-    assert fs["montant_ttc"] is not None
-    assert fs["montant_paiement"] is not None
     shutil.rmtree(outdir)
 
 
@@ -112,7 +93,7 @@ def test_happy_path_financial_summary_complete(monkeypatch):
 def test_missing_payment_has_no_payment_doc(monkeypatch):
     outdir = _run(monkeypatch)
     meta = _meta(outdir, "missing_payment")
-    doc_types = {d["doc_type"] for d in meta["generated_documents"]}
+    doc_types = {d["doc_type"] for d in meta["documents"]}
     assert "payment" not in doc_types
     anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
     assert "missing_payment" in anomaly_types
@@ -122,7 +103,7 @@ def test_missing_payment_has_no_payment_doc(monkeypatch):
 def test_missing_payment_invoice_is_paid(monkeypatch):
     outdir = _run(monkeypatch)
     meta = _meta(outdir, "missing_payment")
-    invoice = next(d for d in meta["generated_documents"] if d["doc_type"] == "invoice")
+    invoice = next(d for d in meta["documents"] if d["doc_type"] == "invoice")
     assert invoice["fields"]["statut_paiement"] == "paid"
     shutil.rmtree(outdir)
 
@@ -172,7 +153,7 @@ def test_paiement_sans_facture(monkeypatch):
     meta = _meta(outdir, "paiement_sans_facture")
     anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
     assert "orphan_payment" in anomaly_types
-    payment = next(d for d in meta["generated_documents"] if d["doc_type"] == "payment")
+    payment = next(d for d in meta["documents"] if d["doc_type"] == "payment")
     assert payment["fields"]["reference_facture"] == "F-0000-0000"
     shutil.rmtree(outdir)
 
@@ -193,9 +174,30 @@ def test_each_document_record_has_required_keys(monkeypatch):
     outdir = _run(monkeypatch)
     for name in EXPECTED_SCENARIOS:
         meta = _meta(outdir, name)
-        for doc in meta["generated_documents"]:
+        for doc in meta["documents"]:
             assert "doc_id" in doc, f"{name}: missing doc_id"
             assert "doc_type" in doc, f"{name}: missing doc_type"
             assert "filename" in doc, f"{name}: missing filename"
             assert "fields" in doc, f"{name}: missing fields"
+    shutil.rmtree(outdir)
+
+
+# ── Status tests ──────────────────────────────────────────────────────────────
+
+def test_error_scenarios_have_error_status(monkeypatch):
+    outdir = _run(monkeypatch)
+    error_scenarios = ["mauvais_siret", "attestation_expiree", "montant_paiement_incorrect"]
+    for name in error_scenarios:
+        meta = _meta(outdir, name)
+        assert meta["status"] == "error", f"{name} should have error status"
+    shutil.rmtree(outdir)
+
+
+def test_warning_scenarios_have_valid_status(monkeypatch):
+    outdir = _run(monkeypatch)
+    # Scenarios with only warnings (no error-severity anomalies)
+    warning_scenarios = ["missing_payment", "revenus_sous_declares", "incoherence_tva", "paiement_sans_facture"]
+    for name in warning_scenarios:
+        meta = _meta(outdir, name)
+        assert meta["status"] == "valid", f"{name} should have valid status (warnings only)"
     shutil.rmtree(outdir)

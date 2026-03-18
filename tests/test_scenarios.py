@@ -1,4 +1,4 @@
-"""Unit and integration tests for ScenarioDefinition, ScenarioMetadata, and ScenarioBuilder."""
+"""Unit and integration tests for ScenarioDefinition, ProcessRecord, and ScenarioBuilder."""
 import os
 import shutil
 import tempfile
@@ -7,10 +7,10 @@ import pytest
 from faker import Faker
 
 from dataset.builder import ScenarioBuilder
-from dataset.consts import AnomalyType, DocType
+from dataset.consts import AnomalyType, DocType, ProcessType, Severity
 from dataset.factories.company import CompanyFactory
 from dataset.factories.noise import NoiseLevel
-from dataset.models import AnomalyDetail, DocumentRecord, ScenarioMetadata
+from dataset.models import AnomalyDetail, DocumentRecord, ProcessRecord
 from dataset.scenarios import SCENARIO_BY_NAME, SCENARIOS
 
 
@@ -18,14 +18,21 @@ from dataset.scenarios import SCENARIO_BY_NAME, SCENARIOS
 
 class TestAnomalyDetail:
     def test_to_dict_includes_type_and_details(self):
-        a = AnomalyDetail(AnomalyType.SIRET_MISMATCH, {"bad_siret": "111", "expected_siret": "222"})
+        a = AnomalyDetail(
+            AnomalyType.SIRET_MISMATCH, Severity.ERROR,
+            "SIRET mismatch", ["facture.pdf"],
+            {"bad_siret": "111", "expected_siret": "222"},
+        )
         d = a.to_dict()
         assert d["type"] == "siret_mismatch"
+        assert d["severity"] == "error"
+        assert d["document_refs"] == ["facture.pdf"]
         assert d["details"]["bad_siret"] == "111"
 
-    def test_empty_details_is_valid(self):
-        a = AnomalyDetail(AnomalyType.MISSING_PAYMENT)
-        assert a.to_dict() == {"type": "missing_payment", "details": {}}
+    def test_empty_details_omitted(self):
+        a = AnomalyDetail(AnomalyType.MISSING_PAYMENT, Severity.WARNING, "No payment", ["invoice.pdf"])
+        d = a.to_dict()
+        assert "details" not in d
 
 
 class TestDocumentRecord:
@@ -38,32 +45,36 @@ class TestDocumentRecord:
         assert d["fields"]["invoice_id"] == "F-001"
 
 
-class TestScenarioMetadata:
+class TestProcessRecord:
     def _make(self, anomalies=None):
-        return ScenarioMetadata(
+        return ProcessRecord(
+            id="test123",
+            type=ProcessType.CONFORMITE_FOURNISSEUR,
             scenario_name="test",
-            description="desc",
-            risk_level="low",
+            status="valid",
             noise_level="none",
-            generated_documents=[
+            documents=[
                 DocumentRecord("id1", DocType.INVOICE, "invoice.pdf", {"invoice_id": "F-001"}),
             ],
-            document_types=[DocType.INVOICE],
             anomalies_expected=anomalies or [],
-            anomalies_detected=[],
-            financial_summary={"montant_ht": 1000.0},
-            relations={},
+            created_at="2026-03-18T00:00:00",
         )
 
     def test_to_dict_has_all_keys(self):
         d = self._make().to_dict()
-        for key in ("scenario_name", "description", "risk_level", "noise_level",
-                    "generated_documents", "document_types", "anomalies_expected",
-                    "anomalies_detected", "financial_summary", "relations"):
+        for key in ("id", "type", "scenario_name", "status", "noise_level",
+                    "documents", "anomalies_expected", "created_at"):
             assert key in d, f"Missing key: {key}"
 
+    def test_no_risk_level_or_financial_summary(self):
+        d = self._make().to_dict()
+        assert "risk_level" not in d
+        assert "financial_summary" not in d
+        assert "relations" not in d
+
     def test_anomalies_serialized(self):
-        a = AnomalyDetail(AnomalyType.TVA_MISMATCH, {"declared_tva": 500.0, "expected_tva": 200.0})
+        a = AnomalyDetail(AnomalyType.TVA_MISMATCH, Severity.WARNING, "TVA mismatch", ["invoice.pdf"],
+                          {"declared_tva": 500.0, "expected_tva": 200.0})
         d = self._make([a]).to_dict()
         assert d["anomalies_expected"][0]["type"] == "tva_mismatch"
 
@@ -80,32 +91,42 @@ class TestScenarioDefinitions:
         }
         assert names == expected
 
-    def test_scenario_by_name_lookup(self):
-        assert SCENARIO_BY_NAME["happy_path"].risk_level == "low"
-        assert SCENARIO_BY_NAME["mauvais_siret"].risk_level == "high"
-
-    def test_happy_path_has_no_anomalies(self):
-        assert SCENARIOS[0].anomaly_types == []
-
-    def test_each_scenario_has_doc_specs(self):
+    def test_all_scenarios_use_conformite_fournisseur(self):
         for s in SCENARIOS:
-            assert len(s.doc_specs) >= 1, f"{s.name}: empty doc_specs"
+            assert s.process_type == ProcessType.CONFORMITE_FOURNISSEUR
 
-    def test_anomaly_types_match_doc_spec_anomalies(self):
-        """Every declared anomaly_type must appear in at least one doc_spec.anomaly."""
-        for s in SCENARIOS:
-            spec_anomalies = {spec.anomaly for spec in s.doc_specs if spec.anomaly}
-            for at in s.anomaly_types:
-                assert at in spec_anomalies, (
-                    f"{s.name}: anomaly_type '{at}' not found in any ScenarioDocSpec"
-                )
+    def test_happy_path_has_no_alterations_or_omissions(self):
+        hp = SCENARIO_BY_NAME["happy_path"]
+        assert hp.alterations == []
+        assert hp.omitted_docs == []
+
+    def test_missing_payment_omits_payment(self):
+        mp = SCENARIO_BY_NAME["missing_payment"]
+        assert DocType.PAYMENT in mp.omitted_docs
+
+    def test_paiement_sans_facture_omits_invoice(self):
+        psf = SCENARIO_BY_NAME["paiement_sans_facture"]
+        assert DocType.INVOICE in psf.omitted_docs
+
+    def test_alteration_scenarios_have_correct_anomaly(self):
+        cases = {
+            "mauvais_siret": AnomalyType.SIRET_MISMATCH,
+            "incoherence_tva": AnomalyType.TVA_MISMATCH,
+            "attestation_expiree": AnomalyType.EXPIRED_ATTESTATION,
+            "montant_paiement_incorrect": AnomalyType.PAYMENT_AMOUNT_MISMATCH,
+            "revenus_sous_declares": AnomalyType.UNDECLARED_REVENUE,
+        }
+        for name, expected_anomaly in cases.items():
+            s = SCENARIO_BY_NAME[name]
+            anomaly_types = {a.anomaly for a in s.alterations}
+            assert expected_anomaly in anomaly_types, f"{name}: missing {expected_anomaly}"
 
 
 # ── Builder integration tests ─────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
 def built_scenarios():
-    """Build all scenarios once into a temp dir and return {name: ScenarioMetadata}."""
+    """Build all scenarios once into a temp dir and return {name: ProcessRecord}."""
     fake = Faker("fr_FR")
     Faker.seed(42)
     import random
@@ -134,24 +155,22 @@ class TestBuilderHappyPath:
         results, _ = built_scenarios
         assert results["happy_path"].anomalies_expected == []
 
+    def test_status_valid(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["happy_path"].status == "valid"
+
     def test_all_doc_types_present(self, built_scenarios):
         results, _ = built_scenarios
-        doc_types = {r.doc_type for r in results["happy_path"].generated_documents}
+        doc_types = {r.doc_type for r in results["happy_path"].documents}
         assert "invoice" in doc_types
         assert "payment" in doc_types
         assert "urssaf_declaration" in doc_types
-
-    def test_invoice_to_payment_relation(self, built_scenarios):
-        results, _ = built_scenarios
-        rel = results["happy_path"].relations
-        assert "invoice_to_payment" in rel
-        assert rel["invoice_to_payment"]["invoice_id"] is not None
 
 
 class TestBuilderMissingPayment:
     def test_no_payment_document(self, built_scenarios):
         results, _ = built_scenarios
-        doc_types = {r.doc_type for r in results["missing_payment"].generated_documents}
+        doc_types = {r.doc_type for r in results["missing_payment"].documents}
         assert "payment" not in doc_types
 
     def test_anomaly_type_correct(self, built_scenarios):
@@ -162,7 +181,7 @@ class TestBuilderMissingPayment:
     def test_invoice_is_paid(self, built_scenarios):
         results, _ = built_scenarios
         invoice = next(
-            r for r in results["missing_payment"].generated_documents
+            r for r in results["missing_payment"].documents
             if r.doc_type == "invoice"
         )
         assert invoice.fields["statut_paiement"] == "paid"
@@ -181,6 +200,10 @@ class TestBuilderMauvaisSiret:
             if a.type == "siret_mismatch"
         )
         assert detail.details["bad_siret"] != detail.details["expected_siret"]
+
+    def test_status_error(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["mauvais_siret"].status == "error"
 
 
 class TestBuilderRevenousSousDeclares:
@@ -222,7 +245,7 @@ class TestBuilderOrphanPayment:
     def test_references_nonexistent_invoice(self, built_scenarios):
         results, _ = built_scenarios
         payment = next(
-            r for r in results["paiement_sans_facture"].generated_documents
+            r for r in results["paiement_sans_facture"].documents
             if r.doc_type == "payment"
         )
         assert payment.fields["reference_facture"] == "F-0000-0000"

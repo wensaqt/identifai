@@ -1,38 +1,46 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .consts import AnomalyType, DocType
 
 
 @dataclass
-class ScenarioDocSpec:
-    """Declares one document slot in a scenario."""
+class Alteration:
+    """Declares an anomaly to inject on a specific document type."""
     doc_type: DocType
-    min_count: int = 1
-    max_count: Optional[int] = None
-    anomaly: Optional[AnomalyType] = None  # anomaly carried by this document
+    anomaly: AnomalyType
 
 
 @dataclass
 class ScenarioDefinition:
-    """Declarative description of a scenario: types, quantities, anomalies."""
+    """Declarative description: process type + alterations (empty = happy path)."""
     name: str
     description: str
-    doc_specs: list[ScenarioDocSpec]
-    anomaly_types: list[AnomalyType]
-    risk_level: str  # "low" | "medium" | "high"
+    process_type: str
+    alterations: list[Alteration]
+    omitted_docs: list[DocType]
 
 
 @dataclass
 class AnomalyDetail:
     """Structured ground-truth for one expected anomaly."""
     type: AnomalyType
+    severity: str
+    message: str
+    document_refs: list[str]
     details: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {"type": str(self.type), "details": self.details}
+        result = {
+            "type": str(self.type),
+            "severity": self.severity,
+            "message": self.message,
+            "document_refs": self.document_refs,
+        }
+        if self.details:
+            result["details"] = self.details
+        return result
 
 
 @dataclass
@@ -53,29 +61,25 @@ class DocumentRecord:
 
 
 @dataclass
-class ScenarioMetadata:
+class ProcessRecord:
     """Complete ground-truth produced by ScenarioBuilder.build()."""
+    id: str
+    type: str
     scenario_name: str
-    description: str
-    risk_level: str
+    status: str
     noise_level: str
-    generated_documents: list[DocumentRecord]
-    document_types: list[str]
+    documents: list[DocumentRecord]
     anomalies_expected: list[AnomalyDetail]
-    anomalies_detected: list[dict]
-    financial_summary: dict
-    relations: dict  # invoice_to_payment, invoice_to_declaration, …
+    created_at: str
 
     def to_dict(self) -> dict:
         return {
+            "id": self.id,
+            "type": self.type,
             "scenario_name": self.scenario_name,
-            "description": self.description,
-            "risk_level": self.risk_level,
+            "status": self.status,
             "noise_level": self.noise_level,
-            "generated_documents": [d.to_dict() for d in self.generated_documents],
-            "document_types": self.document_types,
+            "documents": [d.to_dict() for d in self.documents],
             "anomalies_expected": [a.to_dict() for a in self.anomalies_expected],
-            "anomalies_detected": self.anomalies_detected,
-            "financial_summary": self.financial_summary,
-            "relations": self.relations,
+            "created_at": self.created_at,
         }
