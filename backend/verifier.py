@@ -4,13 +4,10 @@ import logging
 from datetime import datetime
 
 from consts.anomalies import AnomalyType, Severity
-from consts.doc_types import ATTESTATION_TYPES, INVOICE_TYPES, DocType
+from consts.doc_types import ATTESTATION_TYPES, DocType
 from consts.fields import FieldName as F
 
 logger = logging.getLogger(__name__)
-
-# Devis are quotes, not revenue — excluded from URSSAF CA check
-_REVENUE_TYPES = {DocType.FACTURE, DocType.INVOICE}
 
 _DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y")
 _TVA_TOLERANCE = 0.02
@@ -20,8 +17,14 @@ _REVENUE_THRESHOLD = 0.9
 
 # ── Issue builders ───────────────────────────────────────────────────────────
 
+
 def _issue(issue_type: str, severity: str, message: str, files: list[str]) -> dict:
-    return {"type": issue_type, "severity": severity, "message": message, "files": files}
+    return {
+        "type": issue_type,
+        "severity": severity,
+        "message": message,
+        "files": files,
+    }
 
 
 def _error(issue_type: str, message: str, files: list[str]) -> dict:
@@ -33,7 +36,6 @@ def _warning(issue_type: str, message: str, files: list[str]) -> dict:
 
 
 class DocumentVerifier:
-
     # ── Helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -63,7 +65,7 @@ class DocumentVerifier:
     # ── Filters ──────────────────────────────────────────────────────────
 
     def _get_invoices(self, documents: list[dict]) -> list[dict]:
-        return [d for d in documents if self._get_doc_type(d) in INVOICE_TYPES]
+        return [d for d in documents if self._get_doc_type(d) == DocType.INVOICE]
 
     def _get_attestations(self, documents: list[dict]) -> list[dict]:
         return [d for d in documents if self._get_doc_type(d) in ATTESTATION_TYPES]
@@ -72,27 +74,27 @@ class DocumentVerifier:
         return [d for d in documents if self._get_doc_type(d) == DocType.PAYMENT]
 
     def _get_declarations(self, documents: list[dict]) -> list[dict]:
-        return [d for d in documents if self._get_doc_type(d) == DocType.URSSAF_DECLARATION]
+        return [
+            d for d in documents if self._get_doc_type(d) == DocType.URSSAF_DECLARATION
+        ]
 
     def _get_invoice_siret(self, doc: dict) -> str | None:
         return self._get_field(doc, F.SIRET_EMETTEUR) or self._get_field(doc, F.SIRET)
 
     def _build_invoice_index(self, documents: list[dict]) -> dict[str, dict]:
-        invoices = self._get_invoices(documents)
-        return {
-            self._get_field(d, F.INVOICE_ID): d
-            for d in invoices
-            if self._get_field(d, F.INVOICE_ID)
-        }
+        index: dict[str, dict] = {}
+        for d in self._get_invoices(documents):
+            invoice_id = self._get_field(d, F.INVOICE_ID)
+            if invoice_id:
+                index[invoice_id] = d
+        return index
 
     def _get_invoice_ids(self, documents: list[dict]) -> set[str]:
         return set(self._build_invoice_index(documents).keys())
 
     def _sum_invoiced_ht(self, documents: list[dict]) -> float:
         total = 0.0
-        for doc in documents:
-            if self._get_doc_type(doc) not in _REVENUE_TYPES:
-                continue
+        for doc in self._get_invoices(documents):
             ht = self._safe_float(self._get_field(doc, F.MONTANT_HT))
             if ht:
                 total += ht
@@ -106,16 +108,26 @@ class DocumentVerifier:
         if not invoices or not attestations:
             return []
 
-        invoice_sirets = {self._get_invoice_siret(d) for d in invoices if self._get_invoice_siret(d)}
-        attestation_sirets = {self._get_field(d, F.SIRET) for d in attestations if self._get_field(d, F.SIRET)}
+        invoice_sirets = {
+            self._get_invoice_siret(d) for d in invoices if self._get_invoice_siret(d)
+        }
+        attestation_sirets = {
+            self._get_field(d, F.SIRET)
+            for d in attestations
+            if self._get_field(d, F.SIRET)
+        }
         mismatches = invoice_sirets.symmetric_difference(attestation_sirets)
         if not mismatches:
             return []
 
         files = self._files_with_siret(documents, mismatches)
-        return [_error(AnomalyType.SIRET_MISMATCH,
-                       f"SIRET incohérent entre factures/devis et attestations : {', '.join(mismatches)}",
-                       files)]
+        return [
+            _error(
+                AnomalyType.SIRET_MISMATCH,
+                f"SIRET incohérent entre factures et attestations : {', '.join(mismatches)}",
+                files,
+            )
+        ]
 
     def _files_with_siret(self, documents: list[dict], sirets: set[str]) -> list[str]:
         result = []
@@ -141,9 +153,11 @@ class DocumentVerifier:
         exp_date = self._parse_date(exp_str)
         if not exp_date or exp_date >= today:
             return None
-        return _error(AnomalyType.EXPIRED_ATTESTATION,
-                      f"Attestation expirée depuis le {exp_str}",
-                      [doc["filename"]])
+        return _error(
+            AnomalyType.EXPIRED_ATTESTATION,
+            f"Attestation expirée depuis le {exp_str}",
+            [doc["filename"]],
+        )
 
     def check_tva_coherence(self, documents: list[dict]) -> list[dict]:
         issues = []
@@ -162,9 +176,11 @@ class DocumentVerifier:
         expected = round(ht * rate, 2)
         if abs(tva - expected) <= _TVA_TOLERANCE:
             return None
-        return _warning(AnomalyType.TVA_MISMATCH,
-                        f"TVA incohérente : {tva} vs attendu {expected} (HT={ht}, taux={rate})",
-                        [doc["filename"]])
+        return _warning(
+            AnomalyType.TVA_MISMATCH,
+            f"TVA incohérente : {tva} vs attendu {expected} (HT={ht}, taux={rate})",
+            [doc["filename"]],
+        )
 
     def check_payment_amount(self, documents: list[dict]) -> list[dict]:
         invoice_index = self._build_invoice_index(documents)
@@ -175,7 +191,9 @@ class DocumentVerifier:
                 issues.append(issue)
         return issues
 
-    def _check_single_payment_amount(self, doc: dict, invoice_index: dict) -> dict | None:
+    def _check_single_payment_amount(
+        self, doc: dict, invoice_index: dict
+    ) -> dict | None:
         ref = self._get_field(doc, F.REFERENCE_FACTURE)
         if not ref or ref not in invoice_index:
             return None
@@ -185,9 +203,11 @@ class DocumentVerifier:
             return None
         if abs(pay - ttc) <= _PAYMENT_TOLERANCE:
             return None
-        return _error(AnomalyType.PAYMENT_AMOUNT_MISMATCH,
-                      f"Paiement {pay} != facture TTC {ttc} (réf {ref})",
-                      [doc["filename"], invoice_index[ref]["filename"]])
+        return _error(
+            AnomalyType.PAYMENT_AMOUNT_MISMATCH,
+            f"Paiement {pay} != facture TTC {ttc} (réf {ref})",
+            [doc["filename"], invoice_index[ref]["filename"]],
+        )
 
     def check_orphan_payments(self, documents: list[dict]) -> list[dict]:
         invoice_ids = self._get_invoice_ids(documents)
@@ -195,30 +215,35 @@ class DocumentVerifier:
         for doc in self._get_payments(documents):
             ref = self._get_field(doc, F.REFERENCE_FACTURE)
             if ref and ref not in invoice_ids:
-                issues.append(_warning(AnomalyType.ORPHAN_PAYMENT,
-                                       f"Paiement référence une facture inexistante : {ref}",
-                                       [doc["filename"]]))
+                issues.append(
+                    _warning(
+                        AnomalyType.ORPHAN_PAYMENT,
+                        f"Paiement référence une facture inexistante : {ref}",
+                        [doc["filename"]],
+                    )
+                )
         return issues
 
     def check_missing_payment(self, documents: list[dict]) -> list[dict]:
-        payment_refs = set()
-        for doc in self._get_payments(documents):
-            ref = self._get_field(doc, F.REFERENCE_FACTURE)
-            if ref:
-                payment_refs.add(ref)
-
+        payment_refs = {
+            self._get_field(d, F.REFERENCE_FACTURE)
+            for d in self._get_payments(documents)
+            if self._get_field(d, F.REFERENCE_FACTURE)
+        }
         issues = []
         for doc in self._get_invoices(documents):
             statut = self._get_field(doc, F.STATUT_PAIEMENT)
             if statut and statut.lower() == "unpaid":
                 continue
             invoice_id = self._get_field(doc, F.INVOICE_ID)
-            if not invoice_id:
-                continue
-            if invoice_id not in payment_refs:
-                issues.append(_warning(AnomalyType.MISSING_PAYMENT,
-                                       f"Aucun paiement trouvé pour la facture {invoice_id}",
-                                       [doc["filename"]]))
+            if invoice_id and invoice_id not in payment_refs:
+                issues.append(
+                    _warning(
+                        AnomalyType.MISSING_PAYMENT,
+                        f"Aucun paiement trouvé pour la facture {invoice_id}",
+                        [doc["filename"]],
+                    )
+                )
         return issues
 
     def check_declared_revenue(self, documents: list[dict]) -> list[dict]:
@@ -227,11 +252,17 @@ class DocumentVerifier:
             return []
         issues = []
         for doc in self._get_declarations(documents):
-            declared = self._safe_float(self._get_field(doc, F.CHIFFRE_AFFAIRES_DECLARE))
+            declared = self._safe_float(
+                self._get_field(doc, F.CHIFFRE_AFFAIRES_DECLARE)
+            )
             if declared is not None and declared < total_ht * _REVENUE_THRESHOLD:
-                issues.append(_warning(AnomalyType.UNDECLARED_REVENUE,
-                                       f"CA déclaré ({declared}) inférieur à 90% du HT facturé ({total_ht})",
-                                       [doc["filename"]]))
+                issues.append(
+                    _warning(
+                        AnomalyType.UNDECLARED_REVENUE,
+                        f"CA déclaré ({declared}) inférieur à 90% du HT facturé ({total_ht})",
+                        [doc["filename"]],
+                    )
+                )
         return issues
 
     # ── Public API ───────────────────────────────────────────────────────
@@ -249,7 +280,11 @@ class DocumentVerifier:
         issues = []
         for check in checks:
             issues.extend(check(documents))
-        logger.info("[VERIFY] %d documents analysés, %d anomalies détectées", len(documents), len(issues))
+        logger.info(
+            "[VERIFY] %d documents analysés, %d anomalies détectées",
+            len(documents),
+            len(issues),
+        )
         return issues
 
 

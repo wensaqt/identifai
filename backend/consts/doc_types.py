@@ -2,17 +2,18 @@ from enum import StrEnum
 
 
 class DocType(StrEnum):
-    FACTURE = "facture"
     INVOICE = "invoice"
-    DEVIS = "devis"
-    ATTESTATION_SIRET = "attestation_siret"
-    ATTESTATION_URSSAF = "attestation_urssaf"
-    KBIS = "kbis"
-    RIB = "rib"
+    QUOTE = "quote"
+    COMPANY_REGISTRATION = "company_registration"
+    SIRET_CERTIFICATE = "siret_certificate"
+    URSSAF_CERTIFICATE = "urssaf_certificate"
+    BANK_ACCOUNT_DETAILS = "bank_account_details"
     PAYMENT = "payment"
     URSSAF_DECLARATION = "urssaf_declaration"
 
 
-# Groups used for cross-document checks
-INVOICE_TYPES = {DocType.FACTURE, DocType.INVOICE, DocType.DEVIS}
-ATTESTATION_TYPES = {DocType.ATTESTATION_SIRET, DocType.ATTESTATION_URSSAF, DocType.KBIS}
+ATTESTATION_TYPES = {
+    DocType.SIRET_CERTIFICATE,
+    DocType.URSSAF_CERTIFICATE,
+    DocType.COMPANY_REGISTRATION,
+}
