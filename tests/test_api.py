@@ -240,3 +240,47 @@ class TestCancelProcess:
         client.delete(f"/processes/{pid}")
         r = client.delete(f"/processes/{pid}")
         assert r.status_code == 400
+
+
+class TestDocTypeMismatch:
+    """doc_types field: mismatch between declared and classified type."""
+
+    def test_mismatch_adds_warning_anomaly(self, client):
+        """Sending wrong doc_type for a file should produce a doc_type_mismatch warning."""
+        import json
+        _setup_full_ocr()
+        # Declare invoice file as payment (wrong)
+        wrong_types = ["payment", "siret_certificate", "urssaf_certificate",
+                       "company_registration", "bank_account_details", "payment", "urssaf_declaration"]
+        r = client.post(
+            "/analyze",
+            files=list(_FULL_UPLOAD_FILES),
+            data={"doc_types": json.dumps(wrong_types)},
+        )
+        _teardown_ocr()
+        assert r.status_code == 200
+        anomaly_types = [a["type"] for a in r.json()["anomalies"]]
+        assert "doc_type_mismatch" in anomaly_types
+
+    def test_no_mismatch_when_types_correct(self, client):
+        """Sending correct doc_types should not produce doc_type_mismatch anomalies."""
+        import json
+        _setup_full_ocr()
+        correct_types = ["invoice", "siret_certificate", "urssaf_certificate",
+                         "company_registration", "bank_account_details", "payment", "urssaf_declaration"]
+        r = client.post(
+            "/analyze",
+            files=list(_FULL_UPLOAD_FILES),
+            data={"doc_types": json.dumps(correct_types)},
+        )
+        _teardown_ocr()
+        assert r.status_code == 200
+        anomaly_types = [a["type"] for a in r.json()["anomalies"]]
+        assert "doc_type_mismatch" not in anomaly_types
+
+    def test_no_doc_types_field_still_works(self, client):
+        """Omitting doc_types should not break the endpoint."""
+        _setup_full_ocr()
+        r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
+        _teardown_ocr()
+        assert r.status_code == 200
