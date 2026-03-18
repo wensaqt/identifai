@@ -92,3 +92,82 @@ class TestFull:
         fields = extract_fields(text)
         assert fields["siret"] == "72604782880829"
         assert fields["date_emission"] == "2017-05-25"
+
+
+class TestTypeAware:
+    def test_facture_extracts_invoice_id(self):
+        text = "FACTURE N° F-2025-0042 SIRET : 10433218196001"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["invoice_id"] == "F-2025-0042"
+
+    def test_facture_remaps_siret(self):
+        text = "SIRET : 10433218196001 Total HT : 100.00 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert "siret_emetteur" in fields
+        assert "siret" not in fields
+
+    def test_attestation_keeps_siret(self):
+        text = "SIRET : 10433218196001"
+        fields = extract_fields(text, doc_type="attestation_siret")
+        assert "siret" in fields
+        assert "siret_emetteur" not in fields
+
+    def test_backward_compat_no_doc_type(self):
+        text = "SIRET : 10433218196001"
+        fields = extract_fields(text)
+        assert "siret" in fields
+
+
+class TestTvaRate:
+    def test_extracts_tva_rate(self):
+        text = "FACTURE TVA 20% : 200.00 € Total HT : 1000.00 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["tva_rate"] == "0.2"
+
+    def test_tva_rate_10(self):
+        text = "TVA 10% : 50.00 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["tva_rate"] == "0.1"
+
+
+class TestCleanAmount:
+    def test_ocr_thousands_separator(self):
+        """OCR may read 5,823.14 as 5.823.14 — extractor should handle it."""
+        text = "Chiffre d'affaires déclaré : 5.823.14 € Période : 2025-T1 Date de déclaration : 01/04/2025 SIRET : 12345678901234"
+        fields = extract_fields(text, doc_type="urssaf_declaration")
+        assert fields["chiffre_affaires_declare"] == "5823.14"
+
+    def test_normal_amount(self):
+        text = "Total HT : 1234.56 €"
+        fields = extract_fields(text, doc_type="facture")
+        assert fields["montant_ht"] == "1234.56"
+
+
+class TestPaymentExtraction:
+    def test_extracts_payment_fields(self):
+        text = (
+            "CONFIRMATION DE PAIEMENT Référence PAY-2025-0042 "
+            "Date : 15/03/2025 Montant : 1200.00 € "
+            "Méthode : virement Réf. facture : F-2025-0001"
+        )
+        fields = extract_fields(text, doc_type="payment")
+        assert fields["payment_id"] == "PAY-2025-0042"
+        assert fields["montant"] == "1200.00"
+        assert fields["reference_facture"] == "F-2025-0001"
+        assert fields["date_paiement"] == "15/03/2025"
+        assert fields["methode"] == "virement"
+
+
+class TestDeclarationExtraction:
+    def test_extracts_declaration_fields(self):
+        text = (
+            "URSSAF DÉCLARATION DE CHIFFRE D'AFFAIRES "
+            "SIRET : 10433218196001 Période : 2025-T1 "
+            "Chiffre d'affaires déclaré : 50000.00 € "
+            "Date de déclaration : 01/04/2025"
+        )
+        fields = extract_fields(text, doc_type="urssaf_declaration")
+        assert fields["siret"] == "10433218196001"
+        assert fields["periode"] == "2025-T1"
+        assert fields["chiffre_affaires_declare"] == "50000.00"
+        assert fields["date_declaration"] == "01/04/2025"
