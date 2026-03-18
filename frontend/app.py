@@ -20,30 +20,31 @@ if "active_dossier" not in st.session_state:
     st.session_state.active_dossier = None
 
 # ── Dossiers métier ───────────────────────────────────────────────────────────
-# Chaque dossier = une démarche concrète avec ses documents obligatoires
+# Chaque dossier correspond à un ProcessType côté backend.
+# Un seul pour l'instant : conformite_fournisseur.
 DOSSIERS = [
     {
-        "id": "declaration_annuelle",
-        "titre": "Déclaration annuelle d'activité",
-        "icone": "📋",
+        "id": "conformite_fournisseur",
+        "titre": "Conformité fournisseur",
+        "icone": "🏢",
         "description": (
-            "Déposez vos justificatifs pour valider votre déclaration de chiffre d'affaires "
-            "auprès de l'URSSAF. Le système vérifie la cohérence entre vos factures émises "
-            "et le montant déclaré."
+            "Constituez le dossier de conformité d'un fournisseur ou sous-traitant. "
+            "Le système vérifie l'identité légale, la validité des attestations, "
+            "la cohérence des informations entre les documents, "
+            "les paiements et les déclarations URSSAF."
         ),
         "documents": [
             {
-                "id": "declaration",
-                "label": "Déclaration URSSAF",
-                "hint": "Votre déclaration de CA de la période concernée",
+                "id": "facture",
+                "label": "Facture",
+                "hint": "Facture émise par le fournisseur",
                 "obligatoire": True,
             },
             {
-                "id": "facture",
-                "label": "Facture(s) émises",
-                "hint": "Une ou plusieurs factures de la période déclarée",
+                "id": "attestation_siret",
+                "label": "Attestation SIRET",
+                "hint": "Attestation INSEE confirmant le SIRET actif",
                 "obligatoire": True,
-                "multiple": True,
             },
             {
                 "id": "attestation_urssaf",
@@ -51,22 +52,6 @@ DOSSIERS = [
                 "hint": "Attestation en cours de validité (moins de 6 mois)",
                 "obligatoire": True,
             },
-        ],
-        "controles": [
-            "Cohérence entre le CA déclaré et le montant HT des factures",
-            "Validité de l'attestation de vigilance",
-        ],
-    },
-    {
-        "id": "dossier_prestataire",
-        "titre": "Référencement prestataire",
-        "icone": "🏢",
-        "description": (
-            "Constituez le dossier de conformité d'un prestataire ou sous-traitant. "
-            "Le système vérifie l'identité légale, la validité des attestations "
-            "et la cohérence des informations entre les documents."
-        ),
-        "documents": [
             {
                 "id": "kbis",
                 "label": "Extrait Kbis",
@@ -74,49 +59,9 @@ DOSSIERS = [
                 "obligatoire": True,
             },
             {
-                "id": "attestation_siret",
-                "label": "Attestation d'identification (SIRET)",
-                "hint": "Attestation INSEE confirmant le SIRET actif",
-                "obligatoire": True,
-            },
-            {
-                "id": "attestation_urssaf",
-                "label": "Attestation de vigilance URSSAF",
-                "hint": "Attestation en cours de validité",
-                "obligatoire": True,
-            },
-            {
-                "id": "facture",
-                "label": "Facture ou devis",
-                "hint": "Document commercial émis par le prestataire",
-                "obligatoire": True,
-            },
-            {
                 "id": "rib",
                 "label": "RIB",
                 "hint": "Relevé d'identité bancaire pour les paiements",
-                "obligatoire": False,
-            },
-        ],
-        "controles": [
-            "Cohérence du SIRET entre la facture et les attestations",
-            "Validité de l'attestation de vigilance",
-        ],
-    },
-    {
-        "id": "validation_paiement",
-        "titre": "Validation d'un paiement",
-        "icone": "💳",
-        "description": (
-            "Vérifiez qu'un paiement correspond bien à une facture existante "
-            "et que les montants sont cohérents. Idéal pour les contrôles avant "
-            "règlement ou en cas de litige."
-        ),
-        "documents": [
-            {
-                "id": "facture",
-                "label": "Facture",
-                "hint": "La facture à régler ou déjà réglée",
                 "obligatoire": True,
             },
             {
@@ -125,32 +70,20 @@ DOSSIERS = [
                 "hint": "Virement, reçu ou relevé bancaire",
                 "obligatoire": True,
             },
-        ],
-        "controles": [
-            "Correspondance entre le montant du paiement et le TTC de la facture",
-            "Référence de la facture présente dans le justificatif de paiement",
-        ],
-    },
-    {
-        "id": "controle_tva",
-        "titre": "Contrôle de facturation",
-        "icone": "🧾",
-        "description": (
-            "Analysez vos factures pour détecter des incohérences de calcul "
-            "(TVA, montants HT/TTC) avant envoi ou en cas de demande de vérification."
-        ),
-        "documents": [
             {
-                "id": "facture",
-                "label": "Facture(s) à contrôler",
-                "hint": "Factures dont vous souhaitez vérifier les montants",
+                "id": "urssaf_declaration",
+                "label": "Déclaration URSSAF",
+                "hint": "Déclaration de chiffre d'affaires de la période concernée",
                 "obligatoire": True,
-                "multiple": True,
             },
         ],
         "controles": [
-            "Cohérence TVA : montant TVA = HT × taux déclaré",
-            "Présence de tous les champs obligatoires",
+            "Cohérence du SIRET entre la facture et les attestations",
+            "Validité de l'attestation de vigilance URSSAF",
+            "Correspondance entre le montant du paiement et le TTC de la facture",
+            "Cohérence entre le CA déclaré et le montant HT facturé",
+            "Cohérence TVA : montant TVA = HT x taux déclaré",
+            "Présence de tous les documents requis",
         ],
     },
 ]
@@ -166,8 +99,9 @@ ISSUE_LABELS = {
     "orphan_payment": ("Paiement sans facture", "Le justificatif de paiement référence une facture introuvable."),
     "missing_payment": ("Paiement non justifié", "Aucun justificatif de paiement trouvé pour cette facture."),
     "undeclared_revenue": ("Chiffre d'affaires sous-déclaré", "Le CA déclaré est inférieur au montant total facturé."),
-    "missing_fields": ("Document incomplet", "Des informations obligatoires sont absentes du document."),
-    "format_error": ("Format invalide", "Un champ ne respecte pas le format attendu."),
+    "missing_field": ("Document incomplet", "Des informations obligatoires sont absentes du document."),
+    "invalid_format": ("Format invalide", "Un champ ne respecte pas le format attendu."),
+    "missing_document": ("Document manquant", "Un document requis pour cette démarche est absent du dossier."),
 }
 
 DOC_TYPE_LABELS = {
@@ -220,9 +154,9 @@ st.markdown("""
 # ── Sidebar navigation ────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🏛️ Portail Conformité")
-    st.caption("Vérification documentaire URSSAF")
+    st.caption("Vérification documentaire")
     st.divider()
-    st.markdown("**Choisissez une démarche**")
+    st.markdown("**Démarches disponibles**")
 
     for dossier in DOSSIERS:
         label = f"{dossier['icone']} {dossier['titre']}"
@@ -239,22 +173,20 @@ if st.session_state.active_dossier is None:
     st.markdown("## Bienvenue sur le Portail de Conformité")
     st.markdown(
         "Ce portail vous permet de **déposer et vérifier** vos documents administratifs "
-        "liés à votre activité professionnelle. Sélectionnez une démarche dans le menu à gauche."
+        "liés à vos fournisseurs et sous-traitants. Sélectionnez une démarche dans le menu à gauche."
     )
     st.divider()
 
-    cols = st.columns(2)
-    for i, dossier in enumerate(DOSSIERS):
-        with cols[i % 2]:
-            with st.container(border=True):
-                st.markdown(f"### {dossier['icone']} {dossier['titre']}")
-                st.caption(dossier["description"])
-                n_obligatoires = sum(1 for d in dossier["documents"] if d["obligatoire"])
-                st.markdown(f"**{n_obligatoires} document(s) requis**")
-                if st.button("Accéder", key=f"home_{dossier['id']}", use_container_width=True):
-                    st.session_state.active_dossier = dossier["id"]
-                    st.session_state.results = None
-                    st.rerun()
+    for dossier in DOSSIERS:
+        with st.container(border=True):
+            st.markdown(f"### {dossier['icone']} {dossier['titre']}")
+            st.caption(dossier["description"])
+            n_obligatoires = sum(1 for d in dossier["documents"] if d["obligatoire"])
+            st.markdown(f"**{n_obligatoires} document(s) requis**")
+            if st.button("Accéder", key=f"home_{dossier['id']}", use_container_width=True):
+                st.session_state.active_dossier = dossier["id"]
+                st.session_state.results = None
+                st.rerun()
 
 else:
     dossier = DOSSIER_BY_ID[st.session_state.active_dossier]
@@ -334,8 +266,9 @@ else:
                         if resp.status_code == 200:
                             payload = resp.json()
                             st.session_state.results = {
+                                "process": payload,
                                 "documents": payload.get("documents", []),
-                                "issues": payload.get("issues", []),
+                                "issues": payload.get("anomalies", []),
                                 "timestamp": datetime.now().strftime("%d/%m/%Y à %H:%M"),
                             }
                             st.rerun()
@@ -347,13 +280,15 @@ else:
     # ── Résultats ─────────────────────────────────────────────────────────────
     else:
         results_data = st.session_state.results
+        process = results_data.get("process", {})
         issues = results_data["issues"]
         documents = results_data["documents"]
+        process_status = process.get("status", "unknown")
         errors = [i for i in issues if i["severity"] == "error"]
         warnings = [i for i in issues if i["severity"] == "warning"]
 
         # Bandeau de statut global
-        if errors:
+        if process_status == "error" or errors:
             st.error(
                 f"🚨 **{len(errors)} anomalie(s) bloquante(s) détectée(s)** — "
                 "Votre dossier nécessite des corrections avant validation."
@@ -388,7 +323,7 @@ else:
                     )
                     badge = "badge-error" if issue["severity"] == "error" else "badge-warning"
                     level = "Bloquant" if issue["severity"] == "error" else "À vérifier"
-                    files_str = ", ".join(issue.get("files", []))
+                    files_str = ", ".join(issue.get("document_refs", []))
 
                     with st.container(border=True):
                         st.markdown(
@@ -402,23 +337,18 @@ else:
         with col_docs:
             st.markdown("#### Documents analysés")
 
-            issue_files = {f for i in issues for f in i.get("files", [])}
+            issue_files = {f for i in issues for f in i.get("document_refs", [])}
 
             for doc in documents:
                 filename = doc.get("filename", "?")
                 doc_type = doc.get("doc_type")
                 fields = doc.get("fields", {})
-                validation = doc.get("validation", {})
-                pages = doc.get("pages", 0)
                 has_issue = filename in issue_files
-                is_valid = validation.get("valid", True)
 
-                icon = "🔴" if has_issue else ("✅" if is_valid else "⚠️")
+                icon = "🔴" if has_issue else "✅"
                 type_label = DOC_TYPE_LABELS.get(doc_type, "Document non reconnu")
 
                 with st.expander(f"{icon} {filename} — {type_label}"):
-                    st.caption(f"{pages} page(s) analysée(s)")
-
                     if fields:
                         st.markdown("**Informations extraites**")
                         field_labels_map = {
@@ -444,10 +374,6 @@ else:
                             st.markdown(f"- **{label}** : `{v}`")
                     else:
                         st.caption("Aucun champ extrait.")
-
-                    missing = validation.get("missing_fields", [])
-                    if missing:
-                        st.warning(f"Champs manquants : {', '.join(missing)}")
 
         st.divider()
         if st.button("⬅️ Déposer un nouveau dossier", use_container_width=True):

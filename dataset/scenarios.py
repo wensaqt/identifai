@@ -1,103 +1,66 @@
 """Declarative definitions for all 8 business scenarios."""
-from .consts import AnomalyType, DocType
-from .models import ScenarioDefinition, ScenarioDocSpec
+from .consts import AnomalyType, DocType, ProcessType
+from .models import Alteration, ScenarioDefinition
 
 SCENARIOS: list[ScenarioDefinition] = [
     ScenarioDefinition(
         name="happy_path",
         description=(
-            "Tous les documents sont cohérents. "
+            "Process complet, tous les documents valides. "
             "Facture payée, paiement correspondant, déclaration URSSAF correcte."
         ),
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE),
-            ScenarioDocSpec(DocType.DEVIS),
-            ScenarioDocSpec(DocType.PAYMENT),
-            ScenarioDocSpec(DocType.URSSAF_DECLARATION),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-            ScenarioDocSpec(DocType.ATTESTATION_URSSAF),
-            ScenarioDocSpec(DocType.KBIS),
-            ScenarioDocSpec(DocType.RIB),
-        ],
-        anomaly_types=[],
-        risk_level="low",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[],
+        omitted_docs=[],
     ),
     ScenarioDefinition(
         name="missing_payment",
         description="Facture marquée comme payée sans justificatif de paiement.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE, anomaly=AnomalyType.MISSING_PAYMENT),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-            ScenarioDocSpec(DocType.ATTESTATION_URSSAF),
-        ],
-        anomaly_types=[AnomalyType.MISSING_PAYMENT],
-        risk_level="medium",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.INVOICE, AnomalyType.MISSING_PAYMENT)],
+        omitted_docs=[DocType.PAYMENT],
     ),
     ScenarioDefinition(
         name="mauvais_siret",
         description="Le SIRET de la facture ne correspond pas aux attestations.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE, anomaly=AnomalyType.SIRET_MISMATCH),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-            ScenarioDocSpec(DocType.ATTESTATION_URSSAF),
-            ScenarioDocSpec(DocType.KBIS),
-        ],
-        anomaly_types=[AnomalyType.SIRET_MISMATCH],
-        risk_level="high",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.INVOICE, AnomalyType.SIRET_MISMATCH)],
+        omitted_docs=[],
     ),
     ScenarioDefinition(
         name="revenus_sous_declares",
         description="Le CA déclaré à l'URSSAF est inférieur au montant HT facturé.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE),
-            ScenarioDocSpec(DocType.URSSAF_DECLARATION, anomaly=AnomalyType.UNDECLARED_REVENUE),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-        ],
-        anomaly_types=[AnomalyType.UNDECLARED_REVENUE],
-        risk_level="high",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.URSSAF_DECLARATION, AnomalyType.UNDECLARED_REVENUE)],
+        omitted_docs=[],
     ),
     ScenarioDefinition(
         name="incoherence_tva",
         description="Le montant de TVA ne correspond pas au taux appliqué sur le HT.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE, anomaly=AnomalyType.TVA_MISMATCH),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-        ],
-        anomaly_types=[AnomalyType.TVA_MISMATCH],
-        risk_level="medium",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.INVOICE, AnomalyType.TVA_MISMATCH)],
+        omitted_docs=[],
     ),
     ScenarioDefinition(
         name="attestation_expiree",
         description="L'attestation URSSAF est expirée.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-            ScenarioDocSpec(DocType.ATTESTATION_URSSAF, anomaly=AnomalyType.EXPIRED_ATTESTATION),
-            ScenarioDocSpec(DocType.KBIS),
-        ],
-        anomaly_types=[AnomalyType.EXPIRED_ATTESTATION],
-        risk_level="high",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.ATTESTATION_URSSAF, AnomalyType.EXPIRED_ATTESTATION)],
+        omitted_docs=[],
     ),
     ScenarioDefinition(
         name="paiement_sans_facture",
         description="Un paiement référence une facture inexistante.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.PAYMENT, anomaly=AnomalyType.ORPHAN_PAYMENT),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-        ],
-        anomaly_types=[AnomalyType.ORPHAN_PAYMENT],
-        risk_level="medium",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.PAYMENT, AnomalyType.ORPHAN_PAYMENT)],
+        omitted_docs=[DocType.INVOICE],
     ),
     ScenarioDefinition(
         name="montant_paiement_incorrect",
         description="Le montant du paiement ne correspond pas au TTC de la facture.",
-        doc_specs=[
-            ScenarioDocSpec(DocType.INVOICE),
-            ScenarioDocSpec(DocType.PAYMENT, anomaly=AnomalyType.PAYMENT_AMOUNT_MISMATCH),
-            ScenarioDocSpec(DocType.ATTESTATION_SIRET),
-        ],
-        anomaly_types=[AnomalyType.PAYMENT_AMOUNT_MISMATCH],
-        risk_level="medium",
+        process_type=ProcessType.CONFORMITE_FOURNISSEUR,
+        alterations=[Alteration(DocType.PAYMENT, AnomalyType.PAYMENT_AMOUNT_MISMATCH)],
+        omitted_docs=[],
     ),
 ]
 

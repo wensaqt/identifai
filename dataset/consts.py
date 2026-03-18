@@ -6,8 +6,14 @@ remains self-contained (no runtime dependency on backend/).
 from enum import StrEnum
 
 
+class ProcessType(StrEnum):
+    """Process types supported by the dataset generator."""
+    CONFORMITE_FOURNISSEUR = "conformite_fournisseur"
+
+
 class AnomalyType(StrEnum):
     """All anomaly types detectable by the verifier."""
+    MISSING_DOCUMENT = "missing_document"
     SIRET_MISMATCH = "siret_mismatch"
     EXPIRED_ATTESTATION = "expired_attestation"
     TVA_MISMATCH = "tva_mismatch"
@@ -15,6 +21,12 @@ class AnomalyType(StrEnum):
     ORPHAN_PAYMENT = "orphan_payment"
     MISSING_PAYMENT = "missing_payment"
     UNDECLARED_REVENUE = "undeclared_revenue"
+
+
+class Severity(StrEnum):
+    """Anomaly severity levels."""
+    ERROR = "error"
+    WARNING = "warning"
 
 
 class DocType(StrEnum):
@@ -50,4 +62,29 @@ class FieldName(StrEnum):
     PAYMENT_ID = "payment_id"
     REFERENCE_FACTURE = "reference_facture"
     STATUT_PAIEMENT = "statut_paiement"
-    MONTANT_PAIEMENT = "montant_paiement"  # summary alias for payment.montant
+
+
+# Required doc types per process type
+PROCESS_REQUIRED_DOCS: dict[ProcessType, frozenset[DocType]] = {
+    ProcessType.CONFORMITE_FOURNISSEUR: frozenset({
+        DocType.INVOICE,
+        DocType.ATTESTATION_SIRET,
+        DocType.ATTESTATION_URSSAF,
+        DocType.KBIS,
+        DocType.RIB,
+        DocType.PAYMENT,
+        DocType.URSSAF_DECLARATION,
+    }),
+}
+
+# Severity mapping for each anomaly type
+ANOMALY_SEVERITY: dict[AnomalyType, Severity] = {
+    AnomalyType.MISSING_DOCUMENT: Severity.ERROR,
+    AnomalyType.SIRET_MISMATCH: Severity.ERROR,
+    AnomalyType.EXPIRED_ATTESTATION: Severity.ERROR,
+    AnomalyType.PAYMENT_AMOUNT_MISMATCH: Severity.ERROR,
+    AnomalyType.TVA_MISMATCH: Severity.WARNING,
+    AnomalyType.ORPHAN_PAYMENT: Severity.WARNING,
+    AnomalyType.MISSING_PAYMENT: Severity.WARNING,
+    AnomalyType.UNDECLARED_REVENUE: Severity.WARNING,
+}

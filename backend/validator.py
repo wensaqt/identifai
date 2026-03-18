@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 
+from consts.anomalies import AnomalyType, Severity
 from consts.fields import FieldName as F
 from consts.patterns import (
     VALIDATE_AMOUNT,
@@ -53,8 +54,8 @@ class DocumentValidator:
         for field_name in model_cls.REQUIRED_FIELDS:
             if not fields.get(field_name):
                 issues.append({
-                    "type": "missing_field",
-                    "severity": "warning",
+                    "type": AnomalyType.MISSING_FIELD,
+                    "severity": Severity.WARNING,
                     "field": field_name,
                     "message": f"Champ requis manquant : {field_name}",
                 })
@@ -68,8 +69,8 @@ class DocumentValidator:
             pattern = FORMAT_RULES[field_name]
             if not re.match(pattern, str(value)):
                 issues.append({
-                    "type": "invalid_format",
-                    "severity": "warning",
+                    "type": AnomalyType.INVALID_FORMAT,
+                    "severity": Severity.WARNING,
                     "field": field_name,
                     "value": str(value),
                     "message": f"Format invalide pour {field_name}",
