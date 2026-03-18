@@ -5,6 +5,7 @@ class AnomalyType(StrEnum):
     MISSING_FIELD = "missing_field"
     INVALID_FORMAT = "invalid_format"
     MISSING_DOCUMENT = "missing_document"
+    DOC_TYPE_MISMATCH = "doc_type_mismatch"
     SIRET_MISMATCH = "siret_mismatch"
     EXPIRED_ATTESTATION = "expired_attestation"
     TVA_MISMATCH = "tva_mismatch"
