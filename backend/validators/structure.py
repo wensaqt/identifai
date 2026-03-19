@@ -16,7 +16,7 @@ from consts.patterns import (
     VALIDATE_SIRET,
     VALIDATE_TVA,
 )
-from models import DOC_TYPE_MODELS
+from models.document_fields import DOC_TYPE_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ FORMAT_RULES: dict[str, str] = {
 }
 
 
-class DocumentValidator:
+class StructureValidator:
 
     def check_completeness(self, doc_type: str | None, fields: dict) -> list[dict]:
         if not doc_type or doc_type not in DOC_TYPE_MODELS:
@@ -90,7 +90,7 @@ class DocumentValidator:
         }
 
 
-_validator = DocumentValidator()
+_validator = StructureValidator()
 
 
 def validate_completeness(doc_type: str | None, fields: dict) -> list[dict]:

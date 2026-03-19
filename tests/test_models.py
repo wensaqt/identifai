@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from models import (
+from models.document_fields import (
     DOC_TYPE_MODELS,
     BankAccountDetailsFields,
     InvoiceFields,

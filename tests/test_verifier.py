@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from consts.process import ProcessType
-from verifier import verify_documents
+from validators.cross_document import verify_documents
 
 
 def _doc(filename, doc_type, fields):

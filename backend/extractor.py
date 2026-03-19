@@ -4,7 +4,7 @@ import logging
 import re
 
 from consts.doc_types import DocType
-from models import DOC_TYPE_MODELS
+from models.document_fields import DOC_TYPE_MODELS
 from consts.fields import FieldName as F
 from consts.patterns import (
     EXTRACT_BIC,

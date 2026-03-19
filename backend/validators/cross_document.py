@@ -36,7 +36,7 @@ def _warning(issue_type: str, message: str, files: list[str]) -> dict:
     return _issue(issue_type, Severity.WARNING, message, files)
 
 
-class DocumentVerifier:
+class CrossDocumentValidator:
     CHECK_REGISTRY: dict[str, list[str]] = {
         ProcessType.SUPPLIER_COMPLIANCE: [
             "check_siret_coherence",
@@ -308,7 +308,7 @@ class DocumentVerifier:
         return issues
 
 
-_verifier = DocumentVerifier()
+_verifier = CrossDocumentValidator()
 
 
 def verify_documents(documents: list[dict], process_type: str | None = None) -> list[dict]:

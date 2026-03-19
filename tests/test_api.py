@@ -15,7 +15,8 @@ for mod_name in ("doctr", "doctr.io", "doctr.models"):
 
 sys.modules["ocr"] = _ocr_mock
 
-from main import app, _repo  # noqa: E402
+from main import app  # noqa: E402
+from api import _repo  # noqa: E402
 
 # ── OCR stubs for a complete 7-doc set ────────────────────────────────────────
 

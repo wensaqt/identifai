@@ -3,8 +3,8 @@ import pytest
 
 from consts.anomalies import AnomalyType, Severity
 from consts.process import ProcessStatus, ProcessType
-from consts.process_definitions import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION, PROCESS_DEFINITIONS
-from process import Process, ProcessAnomaly, ProcessDocument
+from models.process_definition import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION, PROCESS_DEFINITIONS
+from models.process import Process, ProcessAnomaly, ProcessDocument
 
 
 class TestEnums:

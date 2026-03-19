@@ -1,7 +1,7 @@
 """Tests for ProcessRunner."""
 from consts.anomalies import AnomalyType, Severity
 from consts.process import ProcessStatus
-from consts.process_definitions import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION
+from models.process_definition import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION
 from process_runner import ProcessRunner
 
 
