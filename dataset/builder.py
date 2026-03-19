@@ -151,10 +151,11 @@ class ScenarioBuilder:
     ) -> _BuildContext:
         alteration_anomalies = {a.anomaly for a in definition.alterations}
         omitted = set(definition.omitted_docs)
+        required = PROCESS_REQUIRED_DOCS.get(ProcessType(definition.process_type), frozenset())
         ctx = _BuildContext(
             company=company,
             client=client,
-            has_payment=DocType.PAYMENT not in omitted,
+            has_payment=DocType.PAYMENT in required and DocType.PAYMENT not in omitted,
         )
         if AnomalyType.SIRET_MISMATCH in alteration_anomalies:
             ctx.wrong_siret_company = self._company_factory.with_wrong_siret(company)

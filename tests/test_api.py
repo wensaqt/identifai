@@ -284,3 +284,71 @@ class TestDocTypeMismatch:
         r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
         _teardown_ocr()
         assert r.status_code == 200
+
+
+# ── Annual Declaration OCR stubs ─────────────────────────────────────────────
+
+_ANNUAL_OCR_RESPONSES = [
+    {"filename": "invoice.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "FACTURE N° F-2025-0001 SIRET : 12345678901234 Date : 01/01/2025 Total HT : 1000.00 € Total TTC : 1200.00 €"},
+    {"filename": "declaration.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "URSSAF DÉCLARATION DE CHIFFRE D'AFFAIRES SIRET : 12345678901234 Période : 2025-T1 Chiffre d'affaires déclaré : 1000.00 € Date de déclaration : 01/04/2025"},
+    {"filename": "urssaf.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "URSSAF ATTESTATION DE VIGILANCE SIRET : 12345678901234 Expiration : 31/12/2027"},
+]
+
+_ANNUAL_UPLOAD_FILES = [
+    ("files", ("invoice.pdf", b"%PDF", "application/pdf")),
+    ("files", ("declaration.pdf", b"%PDF", "application/pdf")),
+    ("files", ("urssaf.pdf", b"%PDF", "application/pdf")),
+]
+
+
+def _setup_annual_ocr():
+    _ocr_mock.extract_text.side_effect = list(_ANNUAL_OCR_RESPONSES)
+
+
+class TestAnalyzeAnnualDeclaration:
+    def test_annual_3_docs_ok(self, client):
+        _setup_annual_ocr()
+        r = client.post(
+            "/analyze",
+            files=list(_ANNUAL_UPLOAD_FILES),
+            data={"process_type": "annual_declaration"},
+        )
+        _teardown_ocr()
+        assert r.status_code == 200
+        data = r.json()
+        assert data["type"] == "annual_declaration"
+        assert len(data["documents"]) == 3
+
+    def test_annual_missing_documents(self, client):
+        _ocr_mock.extract_text.side_effect = [
+            {"filename": "invoice.pdf", "pages": 1, "pages_text": ["..."],
+             "text": "FACTURE N° F-2025-0001 SIRET : 12345678901234"},
+        ]
+        r = client.post(
+            "/analyze",
+            files=[("files", ("invoice.pdf", b"%PDF", "application/pdf"))],
+            data={"process_type": "annual_declaration"},
+        )
+        _teardown_ocr()
+        assert r.status_code == 400
+        detail = r.json()["detail"]
+        assert detail["error"] == "missing_documents"
+        assert len(detail["missing"]) > 0
+
+    def test_unknown_process_type(self, client):
+        r = client.post(
+            "/analyze",
+            files=[("files", ("t.pdf", b"%PDF", "application/pdf"))],
+            data={"process_type": "nonexistent"},
+        )
+        assert r.status_code == 400
+
+    def test_default_process_type_is_supplier_compliance(self, client):
+        _setup_full_ocr()
+        r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
+        _teardown_ocr()
+        assert r.status_code == 200
+        assert r.json()["type"] == "supplier_compliance"

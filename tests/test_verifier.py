@@ -3,6 +3,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+from consts.process import ProcessType
 from verifier import verify_documents
 
 
@@ -154,3 +155,49 @@ class TestDeclaredRevenue:
         docs = [_doc("d.pdf", "urssaf_declaration", {"chiffre_affaires_declare": "5000.00"})]
         issues = [i for i in verify_documents(docs) if i["type"] == "undeclared_revenue"]
         assert len(issues) == 0
+
+
+class TestProcessTypeFiltering:
+    """Verify that process_type controls which checks run."""
+
+    def _docs_with_siret_mismatch_and_payment(self):
+        return [
+            _doc("invoice.pdf", "invoice", {
+                "invoice_id": "F-2025-0001", "siret_emetteur": "11111111111111",
+                "montant_ht": "1000.00", "montant_tva": "500.00", "tva_rate": "0.20",
+                "montant_ttc": "1200.00", "statut_paiement": "paid",
+            }),
+            _doc("siret.pdf", "siret_certificate", {"siret": "22222222222222"}),
+            _doc("urssaf.pdf", "urssaf_certificate", {
+                "siret": "22222222222222", "date_expiration": "01/01/2020",
+            }),
+            _doc("declaration.pdf", "urssaf_declaration", {
+                "chiffre_affaires_declare": "100.00",
+            }),
+        ]
+
+    def test_annual_declaration_skips_siret_mismatch(self):
+        docs = self._docs_with_siret_mismatch_and_payment()
+        issues = verify_documents(docs, ProcessType.ANNUAL_DECLARATION)
+        assert not any(i["type"] == "siret_mismatch" for i in issues)
+
+    def test_annual_declaration_skips_payment_checks(self):
+        docs = self._docs_with_siret_mismatch_and_payment()
+        issues = verify_documents(docs, ProcessType.ANNUAL_DECLARATION)
+        payment_types = {"missing_payment", "orphan_payment", "payment_amount_mismatch"}
+        assert not any(i["type"] in payment_types for i in issues)
+
+    def test_annual_declaration_runs_tva_expired_revenue(self):
+        docs = self._docs_with_siret_mismatch_and_payment()
+        issues = verify_documents(docs, ProcessType.ANNUAL_DECLARATION)
+        types = {i["type"] for i in issues}
+        assert "tva_mismatch" in types
+        assert "expired_attestation" in types
+        assert "undeclared_revenue" in types
+
+    def test_none_process_type_runs_all_checks(self):
+        docs = self._docs_with_siret_mismatch_and_payment()
+        issues = verify_documents(docs, None)
+        types = {i["type"] for i in issues}
+        assert "siret_mismatch" in types
+        assert "missing_payment" in types

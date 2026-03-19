@@ -13,6 +13,8 @@ export function AnalyzePage() {
   const demarche = getProcessConfiguration(demarcheId);
   const { analyze, data, error, loading, reset } = useAnalyzeDocuments();
 
+  const handleSubmit = (filesMap) => analyze(filesMap, demarcheId);
+
   if (!demarche || !demarche.enabled) {
     return (
       <PageContainer narrow>
@@ -39,7 +41,7 @@ export function AnalyzePage() {
       ) : (
         <DocumentForm
           documents={demarche.documents}
-          onSubmit={analyze}
+          onSubmit={handleSubmit}
           loading={loading}
           error={error}
         />

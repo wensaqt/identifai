@@ -6,6 +6,7 @@ from datetime import datetime
 from consts.anomalies import AnomalyType, Severity
 from consts.doc_types import ATTESTATION_TYPES, DocType
 from consts.fields import FieldName as F
+from consts.process import ProcessType
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,33 @@ def _warning(issue_type: str, message: str, files: list[str]) -> dict:
 
 
 class DocumentVerifier:
+    CHECK_REGISTRY: dict[str, list[str]] = {
+        ProcessType.SUPPLIER_COMPLIANCE: [
+            "check_siret_coherence",
+            "check_expired_attestations",
+            "check_tva_coherence",
+            "check_payment_amount",
+            "check_orphan_payments",
+            "check_missing_payment",
+            "check_declared_revenue",
+        ],
+        ProcessType.ANNUAL_DECLARATION: [
+            "check_expired_attestations",
+            "check_tva_coherence",
+            "check_declared_revenue",
+        ],
+    }
+
+    _ALL_CHECKS: list[str] = [
+        "check_siret_coherence",
+        "check_expired_attestations",
+        "check_tva_coherence",
+        "check_payment_amount",
+        "check_orphan_payments",
+        "check_missing_payment",
+        "check_declared_revenue",
+    ]
+
     # ── Helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
@@ -267,19 +295,11 @@ class DocumentVerifier:
 
     # ── Public API ───────────────────────────────────────────────────────
 
-    def verify(self, documents: list[dict]) -> list[dict]:
-        checks = [
-            self.check_siret_coherence,
-            self.check_expired_attestations,
-            self.check_tva_coherence,
-            self.check_payment_amount,
-            self.check_orphan_payments,
-            self.check_missing_payment,
-            self.check_declared_revenue,
-        ]
+    def verify(self, documents: list[dict], process_type: str | None = None) -> list[dict]:
+        check_names = self.CHECK_REGISTRY.get(process_type, self._ALL_CHECKS)
         issues = []
-        for check in checks:
-            issues.extend(check(documents))
+        for name in check_names:
+            issues.extend(getattr(self, name)(documents))
         logger.info(
             "[VERIFY] %d documents analysés, %d anomalies détectées",
             len(documents),
@@ -291,5 +311,5 @@ class DocumentVerifier:
 _verifier = DocumentVerifier()
 
 
-def verify_documents(documents: list[dict]) -> list[dict]:
-    return _verifier.verify(documents)
+def verify_documents(documents: list[dict], process_type: str | None = None) -> list[dict]:
+    return _verifier.verify(documents, process_type)

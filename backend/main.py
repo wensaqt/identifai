@@ -100,9 +100,16 @@ def health():
 async def analyze(
     files: list[UploadFile] = File(...),
     doc_types: str = Form(None),
+    process_type: str = Form("supplier_compliance"),
 ):
     """Full pipeline: OCR + classify + extract + validate + verify → Process."""
-    definition = PROCESS_DEFINITIONS[ProcessType.SUPPLIER_COMPLIANCE]
+    try:
+        pt = ProcessType(process_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown process type: {process_type}")
+    if pt not in PROCESS_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown process type: {process_type}")
+    definition = PROCESS_DEFINITIONS[pt]
     expected_map = _build_expected_map(files, doc_types)
 
     # Phase 1 : OCR + classify pour vérifier la complétude
@@ -228,8 +235,14 @@ async def ocr(file: UploadFile = File(...)):
 
 
 @app.post("/verify")
-async def verify(documents: list[dict]):
+async def verify(documents: list[dict], process_type: str = "supplier_compliance"):
     """Cross-document verification on pre-processed results → Process."""
-    definition = PROCESS_DEFINITIONS[ProcessType.SUPPLIER_COMPLIANCE]
+    try:
+        pt = ProcessType(process_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown process type: {process_type}")
+    if pt not in PROCESS_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown process type: {process_type}")
+    definition = PROCESS_DEFINITIONS[pt]
     process = _runner.run_verify_only(documents, definition)
     return process.to_dict()
