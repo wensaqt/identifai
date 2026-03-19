@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class ProcessType(StrEnum):
-    CONFORMITE_FOURNISSEUR = "conformite_fournisseur"
+    SUPPLIER_COMPLIANCE = "supplier_compliance"
 
 
 class ProcessStatus(StrEnum):

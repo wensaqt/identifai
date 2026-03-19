@@ -30,14 +30,18 @@ class ProcessRunner:
         process = self._create_pending(definition)
         return self._execute(process, documents, definition)
 
-    def rerun(self, process: Process, documents: list[dict], definition: ProcessDefinition) -> Process:
+    def rerun(
+        self, process: Process, documents: list[dict], definition: ProcessDefinition
+    ) -> Process:
         """Re-run the pipeline on an existing process (update scenario)."""
         process.status = ProcessStatus.PENDING
         if self._repo:
             self._repo.update(process)
         return self._execute(process, documents, definition)
 
-    def run_verify_only(self, documents: list[dict], definition: ProcessDefinition) -> Process:
+    def run_verify_only(
+        self, documents: list[dict], definition: ProcessDefinition
+    ) -> Process:
         """Run only validation + verification (no OCR). For pre-processed documents."""
         process = self._create_pending(definition)
         return self._execute(process, documents, definition)
@@ -55,10 +59,14 @@ class ProcessRunner:
         )
         if self._repo:
             self._repo.insert(process)
+        logger.info("[DB] inserted pending process %s", process)
         return process
 
     def _execute(
-        self, process: Process, documents: list[dict], definition: ProcessDefinition,
+        self,
+        process: Process,
+        documents: list[dict],
+        definition: ProcessDefinition,
     ) -> Process:
         process.documents = self._build_process_documents(documents)
 
@@ -68,6 +76,7 @@ class ProcessRunner:
         anomalies.extend(self._collect_cross_doc_anomalies(documents))
 
         process.anomalies = anomalies
+
         process.status = self._compute_status(anomalies)
 
         if self._repo:
@@ -75,8 +84,11 @@ class ProcessRunner:
 
         logger.info(
             "[PROCESS] id=%s type=%s status=%s docs=%d anomalies=%d",
-            process.id, process.type, process.status,
-            len(process.documents), len(process.anomalies),
+            process.id,
+            process.type,
+            process.status,
+            len(process.documents),
+            len(process.anomalies),
         )
         return process
 
@@ -90,7 +102,9 @@ class ProcessRunner:
             for doc in documents
         ]
 
-    def _collect_document_anomalies(self, documents: list[dict]) -> list[ProcessAnomaly]:
+    def _collect_document_anomalies(
+        self, documents: list[dict]
+    ) -> list[ProcessAnomaly]:
         """Run validator on each document and convert issues to ProcessAnomaly."""
         anomalies: list[ProcessAnomaly] = []
         for doc in documents:
@@ -100,40 +114,50 @@ class ProcessRunner:
             result = self._validator.validate(doc_type, fields)
 
             for issue in result["completeness"]:
-                anomalies.append(ProcessAnomaly(
-                    type=AnomalyType.MISSING_FIELD,
-                    severity=Severity.WARNING,
-                    message=issue["message"],
-                    document_refs=[filename],
-                    field=issue.get("field"),
-                ))
+                anomalies.append(
+                    ProcessAnomaly(
+                        type=AnomalyType.MISSING_FIELD,
+                        severity=Severity.WARNING,
+                        message=issue["message"],
+                        document_refs=[filename],
+                        field=issue.get("field"),
+                    )
+                )
             for issue in result["format"]:
-                anomalies.append(ProcessAnomaly(
-                    type=AnomalyType.INVALID_FORMAT,
-                    severity=Severity.WARNING,
-                    message=issue["message"],
-                    document_refs=[filename],
-                    field=issue.get("field"),
-                ))
+                anomalies.append(
+                    ProcessAnomaly(
+                        type=AnomalyType.INVALID_FORMAT,
+                        severity=Severity.WARNING,
+                        message=issue["message"],
+                        document_refs=[filename],
+                        field=issue.get("field"),
+                    )
+                )
         return anomalies
 
     def _check_missing_documents(
-        self, documents: list[dict], definition: ProcessDefinition,
+        self,
+        documents: list[dict],
+        definition: ProcessDefinition,
     ) -> list[ProcessAnomaly]:
         """Check which required doc types are missing."""
         provided = {doc.get("doc_type") for doc in documents}
         anomalies: list[ProcessAnomaly] = []
         for required_type in definition.required_doc_types:
             if required_type not in provided:
-                anomalies.append(ProcessAnomaly(
-                    type=AnomalyType.MISSING_DOCUMENT,
-                    severity=Severity.ERROR,
-                    message=f"Document manquant : {required_type}",
-                    document_refs=[],
-                ))
+                anomalies.append(
+                    ProcessAnomaly(
+                        type=AnomalyType.MISSING_DOCUMENT,
+                        severity=Severity.ERROR,
+                        message=f"Document manquant : {required_type}",
+                        document_refs=[],
+                    )
+                )
         return anomalies
 
-    def _collect_cross_doc_anomalies(self, documents: list[dict]) -> list[ProcessAnomaly]:
+    def _collect_cross_doc_anomalies(
+        self, documents: list[dict]
+    ) -> list[ProcessAnomaly]:
         """Run verifier and convert issues to ProcessAnomaly."""
         issues = self._verifier.verify(documents)
         return [

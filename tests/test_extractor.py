@@ -97,18 +97,18 @@ class TestFull:
 class TestTypeAware:
     def test_facture_extracts_invoice_id(self):
         text = "FACTURE N° F-2025-0042 SIRET : 10433218196001"
-        fields = extract_fields(text, doc_type="facture")
+        fields = extract_fields(text, doc_type="invoice")
         assert fields["invoice_id"] == "F-2025-0042"
 
     def test_facture_remaps_siret(self):
         text = "SIRET : 10433218196001 Total HT : 100.00 €"
-        fields = extract_fields(text, doc_type="facture")
+        fields = extract_fields(text, doc_type="invoice")
         assert "siret_emetteur" in fields
         assert "siret" not in fields
 
     def test_attestation_keeps_siret(self):
         text = "SIRET : 10433218196001"
-        fields = extract_fields(text, doc_type="attestation_siret")
+        fields = extract_fields(text, doc_type="siret_certificate")
         assert "siret" in fields
         assert "siret_emetteur" not in fields
 
@@ -121,12 +121,12 @@ class TestTypeAware:
 class TestTvaRate:
     def test_extracts_tva_rate(self):
         text = "FACTURE TVA 20% : 200.00 € Total HT : 1000.00 €"
-        fields = extract_fields(text, doc_type="facture")
+        fields = extract_fields(text, doc_type="invoice")
         assert fields["tva_rate"] == "0.2"
 
     def test_tva_rate_10(self):
         text = "TVA 10% : 50.00 €"
-        fields = extract_fields(text, doc_type="facture")
+        fields = extract_fields(text, doc_type="invoice")
         assert fields["tva_rate"] == "0.1"
 
 
@@ -139,7 +139,7 @@ class TestCleanAmount:
 
     def test_normal_amount(self):
         text = "Total HT : 1234.56 €"
-        fields = extract_fields(text, doc_type="facture")
+        fields = extract_fields(text, doc_type="invoice")
         assert fields["montant_ht"] == "1234.56"
 
 

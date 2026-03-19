@@ -1,0 +1,17 @@
+.process-page__loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2xl);
+}
+
+.process-page__actions {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.process-page__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+}

@@ -1,0 +1,10 @@
+.anomaly-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.anomaly-list__empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}

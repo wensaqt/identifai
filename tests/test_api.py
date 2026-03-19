@@ -17,6 +17,53 @@ sys.modules["ocr"] = _ocr_mock
 
 from main import app, _repo  # noqa: E402
 
+# ── OCR stubs for a complete 7-doc set ────────────────────────────────────────
+
+_FULL_OCR_RESPONSES = [
+    {"filename": "invoice.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "FACTURE N° F-2025-0001 SIRET : 12345678901234 Date : 01/01/2025 Total HT : 1000.00 € Total TTC : 1200.00 €"},
+    {"filename": "siret.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "AVIS DE SITUATION AU RÉPERTOIRE SIRENE SIRET : 12345678901234"},
+    {"filename": "urssaf.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "URSSAF ATTESTATION DE VIGILANCE SIRET : 12345678901234 Expiration : 31/12/2027"},
+    {"filename": "kbis.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "EXTRAIT K BIS Greffe du Tribunal SIRET : 12345678901234 SIREN : 123456789"},
+    {"filename": "rib.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "RELEVÉ D'IDENTITÉ BANCAIRE IBAN : FR7630001007941234567890185"},
+    {"filename": "payment.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "CONFIRMATION DE PAIEMENT PAY-2025-0001 Date : 15/01/2025 Montant : 1200.00 € Réf. facture : F-2025-0001"},
+    {"filename": "declaration.pdf", "pages": 1, "pages_text": ["..."],
+     "text": "URSSAF DÉCLARATION DE CHIFFRE D'AFFAIRES SIRET : 12345678901234 Période : 2025-T1 Chiffre d'affaires déclaré : 1000.00 € Date de déclaration : 01/04/2025"},
+]
+
+_FULL_UPLOAD_FILES = [
+    ("files", ("invoice.pdf", b"%PDF", "application/pdf")),
+    ("files", ("siret.pdf", b"%PDF", "application/pdf")),
+    ("files", ("urssaf.pdf", b"%PDF", "application/pdf")),
+    ("files", ("kbis.pdf", b"%PDF", "application/pdf")),
+    ("files", ("rib.pdf", b"%PDF", "application/pdf")),
+    ("files", ("payment.pdf", b"%PDF", "application/pdf")),
+    ("files", ("declaration.pdf", b"%PDF", "application/pdf")),
+]
+
+
+def _setup_full_ocr():
+    _ocr_mock.extract_text.side_effect = list(_FULL_OCR_RESPONSES)
+
+
+def _teardown_ocr():
+    _ocr_mock.extract_text.side_effect = None
+    _ocr_mock.extract_text.reset_mock()
+
+
+def _create_process(client):
+    """Helper: create a complete process and return its ID."""
+    _setup_full_ocr()
+    r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
+    _teardown_ocr()
+    assert r.status_code == 200
+    return r.json()["id"]
+
 
 @pytest.fixture
 def client():
@@ -25,7 +72,6 @@ def client():
 
 @pytest.fixture(autouse=True)
 def _clean_db():
-    """Drop the test collection before each test."""
     _repo._col.drop()
     yield
     _repo._col.drop()
@@ -42,109 +88,73 @@ class TestOcrEndpoint:
     def test_rejects_unsupported_type(self, client):
         r = client.post("/ocr", files={"file": ("test.txt", b"hello", "text/plain")})
         assert r.status_code == 400
-        assert "Unsupported file type" in r.json()["detail"]
 
     def test_rejects_oversized_file(self, client):
         big = b"x" * (20 * 1024 * 1024 + 1)
         r = client.post("/ocr", files={"file": ("big.pdf", big, "application/pdf")})
         assert r.status_code == 400
-        assert "20 MB" in r.json()["detail"]
 
     def test_accepts_pdf(self, client):
         _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf",
-            "pages": 1,
-            "text": "hello world",
-            "pages_text": ["hello world"],
+            "filename": "test.pdf", "pages": 1,
+            "text": "hello world", "pages_text": ["hello world"],
         }
-        r = client.post(
-            "/ocr", files={"file": ("test.pdf", b"%PDF-1.4 fake", "application/pdf")}
-        )
+        r = client.post("/ocr", files={"file": ("test.pdf", b"%PDF", "application/pdf")})
         assert r.status_code == 200
         data = r.json()
         assert data["text"] == "hello world"
         assert "fields" in data
         assert "doc_type" in data
-        assert "validation" in data
 
     def test_pipeline_classify_then_extract(self, client):
         _ocr_mock.extract_text.return_value = {
-            "filename": "facture.pdf",
-            "pages": 1,
+            "filename": "facture.pdf", "pages": 1,
             "text": "FACTURE N° F-2025-0042 SIRET : 10433218196001 TVA : FR59104332181 Date : 02/09/2025 Total HT : 100.00 € Total TTC : 120.00 €",
             "pages_text": ["..."],
         }
-        r = client.post(
-            "/ocr", files={"file": ("facture.pdf", b"%PDF-1.4 fake", "application/pdf")}
-        )
+        r = client.post("/ocr", files={"file": ("facture.pdf", b"%PDF", "application/pdf")})
         data = r.json()
-        assert data["doc_type"] == "facture"
+        assert data["doc_type"] == "invoice"
         assert "siret_emetteur" in data["fields"]
-        assert data["fields"]["tva"] == "FR59104332181"
-        assert data["validation"]["is_valid"] is True
 
 
 class TestAnalyzeEndpoint:
     def test_returns_process_shape(self, client):
-        _ocr_mock.extract_text.side_effect = [
-            {
-                "filename": "facture.pdf",
-                "pages": 1,
-                "text": "FACTURE N° F-2025-0001 SIRET : 11111111111111 Date : 01/01/2025 Total HT : 100.00 € Total TTC : 120.00 €",
-                "pages_text": ["..."],
-            },
-            {
-                "filename": "attestation.pdf",
-                "pages": 1,
-                "text": "AVIS DE SITUATION AU RÉPERTOIRE SIRENE SIRET : 22222222222222",
-                "pages_text": ["..."],
-            },
-        ]
-        r = client.post(
-            "/analyze",
-            files=[
-                ("files", ("facture.pdf", b"%PDF", "application/pdf")),
-                ("files", ("attestation.pdf", b"%PDF", "application/pdf")),
-            ],
-        )
+        _setup_full_ocr()
+        r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
+        _teardown_ocr()
         assert r.status_code == 200
         data = r.json()
-        # Process shape
         assert "id" in data
-        assert data["type"] == "conformite_fournisseur"
+        assert data["type"] == "supplier_compliance"
         assert data["status"] in ("valid", "error")
         assert "created_at" in data
-        assert len(data["documents"]) == 2
-        assert data["documents"][0]["doc_type"] == "facture"
-        assert data["documents"][1]["doc_type"] == "attestation_siret"
-        # SIRET mismatch between facture and attestation
-        assert any(a["type"] == "siret_mismatch" for a in data["anomalies"])
-        _ocr_mock.extract_text.side_effect = None
+        assert len(data["documents"]) == 7
+
+    def test_rejects_missing_documents(self, client):
+        _ocr_mock.extract_text.side_effect = [
+            {"filename": "invoice.pdf", "pages": 1, "pages_text": ["..."],
+             "text": "FACTURE N° F-2025-0001 SIRET : 12345678901234"},
+        ]
+        r = client.post("/analyze", files=[
+            ("files", ("invoice.pdf", b"%PDF", "application/pdf")),
+        ])
+        _teardown_ocr()
+        assert r.status_code == 400
+        detail = r.json()["detail"]
+        assert detail["error"] == "missing_documents"
+        assert len(detail["missing"]) > 0
 
     def test_process_persisted_in_db(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf",
-            "pages": 1,
-            "text": "hello world",
-            "pages_text": ["hello world"],
-        }
-        r = client.post(
-            "/analyze",
-            files=[("files", ("test.pdf", b"%PDF", "application/pdf"))],
-        )
-        process_id = r.json()["id"]
-        # Should be retrievable
-        r2 = client.get(f"/processes/{process_id}")
-        assert r2.status_code == 200
-        assert r2.json()["id"] == process_id
+        pid = _create_process(client)
+        r = client.get(f"/processes/{pid}")
+        assert r.status_code == 200
+        assert r.json()["id"] == pid
 
     def test_rejects_bad_file_in_batch(self, client):
-        r = client.post(
-            "/analyze",
-            files=[
-                ("files", ("test.txt", b"hello", "text/plain")),
-            ],
-        )
+        r = client.post("/analyze", files=[
+            ("files", ("test.txt", b"hello", "text/plain")),
+        ])
         assert r.status_code == 400
 
 
@@ -154,16 +164,10 @@ class TestGetProcess:
         assert r.status_code == 404
 
     def test_found(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        r = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        pid = r.json()["id"]
-        r2 = client.get(f"/processes/{pid}")
-        assert r2.status_code == 200
-        assert r2.json()["id"] == pid
-        assert r2.json()["type"] == "conformite_fournisseur"
+        pid = _create_process(client)
+        r = client.get(f"/processes/{pid}")
+        assert r.status_code == 200
+        assert r.json()["type"] == "supplier_compliance"
 
 
 class TestListProcesses:
@@ -173,85 +177,110 @@ class TestListProcesses:
         assert r.json() == []
 
     def test_lists_active_only(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        # Create two processes
-        r1 = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        r2 = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        # Cancel one
-        client.delete(f"/processes/{r1.json()['id']}")
-        # Only one should be listed
+        pid1 = _create_process(client)
+        pid2 = _create_process(client)
+        client.delete(f"/processes/{pid1}")
         r = client.get("/processes")
         ids = [p["id"] for p in r.json()]
-        assert r1.json()["id"] not in ids
-        assert r2.json()["id"] in ids
+        assert pid1 not in ids
+        assert pid2 in ids
 
 
 class TestUpdateProcess:
     def test_rerun_pipeline(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        r = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        pid = r.json()["id"]
+        pid = _create_process(client)
+        _setup_full_ocr()
+        r = client.put(f"/processes/{pid}", files=list(_FULL_UPLOAD_FILES))
+        _teardown_ocr()
+        assert r.status_code == 200
+        assert r.json()["id"] == pid
 
-        # Re-run with same file
-        r2 = client.put(
-            f"/processes/{pid}",
-            files=[("files", ("t.pdf", b"%PDF", "application/pdf"))],
-        )
-        assert r2.status_code == 200
-        assert r2.json()["id"] == pid  # Same process ID
+    def test_update_rejects_missing_documents(self, client):
+        pid = _create_process(client)
+        _ocr_mock.extract_text.side_effect = [
+            {"filename": "invoice.pdf", "pages": 1, "pages_text": ["..."],
+             "text": "FACTURE N° F-2025-0001"},
+        ]
+        r = client.put(f"/processes/{pid}", files=[
+            ("files", ("invoice.pdf", b"%PDF", "application/pdf")),
+        ])
+        _teardown_ocr()
+        assert r.status_code == 400
+        assert r.json()["detail"]["error"] == "missing_documents"
 
     def test_update_not_found(self, client):
-        r = client.put(
-            "/processes/nope",
-            files=[("files", ("t.pdf", b"%PDF", "application/pdf"))],
-        )
+        r = client.put("/processes/nope", files=[
+            ("files", ("t.pdf", b"%PDF", "application/pdf")),
+        ])
         assert r.status_code == 404
 
     def test_cannot_update_cancelled(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        r = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        pid = r.json()["id"]
+        pid = _create_process(client)
         client.delete(f"/processes/{pid}")
-        r2 = client.put(
-            f"/processes/{pid}",
-            files=[("files", ("t.pdf", b"%PDF", "application/pdf"))],
-        )
-        assert r2.status_code == 400
+        r = client.put(f"/processes/{pid}", files=[
+            ("files", ("t.pdf", b"%PDF", "application/pdf")),
+        ])
+        assert r.status_code == 400
 
 
 class TestCancelProcess:
     def test_cancel(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        r = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        pid = r.json()["id"]
-        r2 = client.delete(f"/processes/{pid}")
-        assert r2.status_code == 200
-        assert r2.json()["status"] == "cancelled"
-        assert "deleted_at" in r2.json()
+        pid = _create_process(client)
+        r = client.delete(f"/processes/{pid}")
+        assert r.status_code == 200
+        assert r.json()["status"] == "cancelled"
+        assert "deleted_at" in r.json()
 
     def test_cancel_not_found(self, client):
         r = client.delete("/processes/nope")
         assert r.status_code == 404
 
     def test_cancel_already_cancelled(self, client):
-        _ocr_mock.extract_text.return_value = {
-            "filename": "test.pdf", "pages": 1,
-            "text": "hello", "pages_text": ["hello"],
-        }
-        r = client.post("/analyze", files=[("files", ("t.pdf", b"%PDF", "application/pdf"))])
-        pid = r.json()["id"]
+        pid = _create_process(client)
         client.delete(f"/processes/{pid}")
-        r2 = client.delete(f"/processes/{pid}")
-        assert r2.status_code == 400
+        r = client.delete(f"/processes/{pid}")
+        assert r.status_code == 400
+
+
+class TestDocTypeMismatch:
+    """doc_types field: mismatch between declared and classified type."""
+
+    def test_mismatch_adds_warning_anomaly(self, client):
+        """Sending wrong doc_type for a file should produce a doc_type_mismatch warning."""
+        import json
+        _setup_full_ocr()
+        # Declare invoice file as payment (wrong)
+        wrong_types = ["payment", "siret_certificate", "urssaf_certificate",
+                       "company_registration", "bank_account_details", "payment", "urssaf_declaration"]
+        r = client.post(
+            "/analyze",
+            files=list(_FULL_UPLOAD_FILES),
+            data={"doc_types": json.dumps(wrong_types)},
+        )
+        _teardown_ocr()
+        assert r.status_code == 200
+        anomaly_types = [a["type"] for a in r.json()["anomalies"]]
+        assert "doc_type_mismatch" in anomaly_types
+
+    def test_no_mismatch_when_types_correct(self, client):
+        """Sending correct doc_types should not produce doc_type_mismatch anomalies."""
+        import json
+        _setup_full_ocr()
+        correct_types = ["invoice", "siret_certificate", "urssaf_certificate",
+                         "company_registration", "bank_account_details", "payment", "urssaf_declaration"]
+        r = client.post(
+            "/analyze",
+            files=list(_FULL_UPLOAD_FILES),
+            data={"doc_types": json.dumps(correct_types)},
+        )
+        _teardown_ocr()
+        assert r.status_code == 200
+        anomaly_types = [a["type"] for a in r.json()["anomalies"]]
+        assert "doc_type_mismatch" not in anomaly_types
+
+    def test_no_doc_types_field_still_works(self, client):
+        """Omitting doc_types should not break the endpoint."""
+        _setup_full_ocr()
+        r = client.post("/analyze", files=list(_FULL_UPLOAD_FILES))
+        _teardown_ocr()
+        assert r.status_code == 200

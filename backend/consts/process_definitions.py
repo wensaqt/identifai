@@ -12,19 +12,21 @@ class ProcessDefinition:
     required_doc_types: frozenset[str]
 
 
-CONFORMITE_FOURNISSEUR = ProcessDefinition(
-    process_type=ProcessType.CONFORMITE_FOURNISSEUR,
-    required_doc_types=frozenset({
-        DocType.FACTURE,
-        DocType.ATTESTATION_SIRET,
-        DocType.ATTESTATION_URSSAF,
-        DocType.KBIS,
-        DocType.RIB,
-        DocType.PAYMENT,
-        DocType.URSSAF_DECLARATION,
-    }),
+SUPPLIER_COMPLIANCE = ProcessDefinition(
+    process_type=ProcessType.SUPPLIER_COMPLIANCE,
+    required_doc_types=frozenset(
+        {
+            DocType.INVOICE,
+            DocType.SIRET_CERTIFICATE,
+            DocType.URSSAF_CERTIFICATE,
+            DocType.COMPANY_REGISTRATION,
+            DocType.BANK_ACCOUNT_DETAILS,
+            DocType.PAYMENT,
+            DocType.URSSAF_DECLARATION,
+        }
+    ),
 )
 
 PROCESS_DEFINITIONS: dict[ProcessType, ProcessDefinition] = {
-    ProcessType.CONFORMITE_FOURNISSEUR: CONFORMITE_FOURNISSEUR,
+    ProcessType.SUPPLIER_COMPLIANCE: SUPPLIER_COMPLIANCE,
 }

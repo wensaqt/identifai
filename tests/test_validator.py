@@ -15,11 +15,11 @@ class TestCompleteness:
             "montant_ttc": "120.00",
             "date_emission": "01/01/2025",
         }
-        assert validate_completeness("facture", fields) == []
+        assert validate_completeness("invoice", fields) == []
 
     def test_incomplete_invoice(self):
         fields = {"siret_emetteur": "12345678901234"}
-        issues = validate_completeness("facture", fields)
+        issues = validate_completeness("invoice", fields)
         missing = [i["field"] for i in issues]
         assert "invoice_id" in missing
         assert "montant_ht" in missing
@@ -27,7 +27,7 @@ class TestCompleteness:
         assert "date_emission" in missing
 
     def test_rib_missing_iban(self):
-        issues = validate_completeness("rib", {"bic": "BNPAFRPP"})
+        issues = validate_completeness("bank_account_details", {"bic": "BNPAFRPP"})
         assert len(issues) == 1
         assert issues[0]["field"] == "iban"
 
@@ -116,13 +116,13 @@ class TestValidateDocument:
             "montant_ttc": "120.00",
             "date_emission": "2025-01-01",
         }
-        result = validate_document("facture", fields)
+        result = validate_document("invoice", fields)
         assert result["is_valid"] is True
         assert result["completeness"] == []
         assert result["format"] == []
 
     def test_missing_field_makes_invalid(self):
-        result = validate_document("facture", {"siret_emetteur": "12345678901234"})
+        result = validate_document("invoice", {"siret_emetteur": "12345678901234"})
         assert result["is_valid"] is False
         assert len(result["completeness"]) > 0
 
@@ -134,6 +134,6 @@ class TestValidateDocument:
             "montant_ttc": "120.00",
             "date_emission": "2025-01-01",
         }
-        result = validate_document("facture", fields)
+        result = validate_document("invoice", fields)
         assert result["is_valid"] is False
         assert len(result["format"]) > 0

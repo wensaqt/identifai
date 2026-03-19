@@ -28,11 +28,9 @@ services:
       retries: 3
 
   frontend:
-    build: ./frontend
+    build: ./frontend-react
     ports:
-      - "8501:8501"
-    environment:
-      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - "8080:8080"
     depends_on:
       backend:
         condition: service_healthy

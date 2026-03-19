@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, fields as dc_fields
+from dataclasses import dataclass
+from dataclasses import fields as dc_fields
 from typing import ClassVar, Optional
 
 from consts.doc_types import DocType
@@ -29,7 +30,11 @@ class DocumentFields:
 class InvoiceFields(DocumentFields):
     DOC_TYPE: ClassVar[str] = DocType.INVOICE
     REQUIRED_FIELDS: ClassVar[list[str]] = [
-        F.INVOICE_ID, F.SIRET_EMETTEUR, F.MONTANT_HT, F.MONTANT_TTC, F.DATE_EMISSION,
+        F.INVOICE_ID,
+        F.SIRET_EMETTEUR,
+        F.MONTANT_HT,
+        F.MONTANT_TTC,
+        F.DATE_EMISSION,
     ]
     siret_emetteur: Optional[str] = None
     nom_emetteur: Optional[str] = None
@@ -47,10 +52,12 @@ class InvoiceFields(DocumentFields):
 
 
 @dataclass
-class DevisFields(DocumentFields):
-    DOC_TYPE: ClassVar[str] = DocType.DEVIS
+class QuoteFields(DocumentFields):
+    DOC_TYPE: ClassVar[str] = DocType.QUOTE
     REQUIRED_FIELDS: ClassVar[list[str]] = [
-        F.SIRET_EMETTEUR, F.MONTANT_HT, F.DATE_EMISSION,
+        F.SIRET_EMETTEUR,
+        F.MONTANT_HT,
+        F.DATE_EMISSION,
     ]
     numero: Optional[str] = None
     siret_emetteur: Optional[str] = None
@@ -63,8 +70,8 @@ class DevisFields(DocumentFields):
 
 
 @dataclass
-class AttestationSiretFields(DocumentFields):
-    DOC_TYPE: ClassVar[str] = DocType.ATTESTATION_SIRET
+class SiretCertificateFields(DocumentFields):
+    DOC_TYPE: ClassVar[str] = DocType.SIRET_CERTIFICATE
     REQUIRED_FIELDS: ClassVar[list[str]] = [F.SIRET]
     siret: Optional[str] = None
     siren: Optional[str] = None
@@ -73,8 +80,8 @@ class AttestationSiretFields(DocumentFields):
 
 
 @dataclass
-class AttestationUrssafFields(DocumentFields):
-    DOC_TYPE: ClassVar[str] = DocType.ATTESTATION_URSSAF
+class UrssafCertificateFields(DocumentFields):
+    DOC_TYPE: ClassVar[str] = DocType.URSSAF_CERTIFICATE
     REQUIRED_FIELDS: ClassVar[list[str]] = [F.SIRET, F.DATE_EXPIRATION]
     siret: Optional[str] = None
     company_name: Optional[str] = None
@@ -83,8 +90,8 @@ class AttestationUrssafFields(DocumentFields):
 
 
 @dataclass
-class KbisFields(DocumentFields):
-    DOC_TYPE: ClassVar[str] = DocType.KBIS
+class CompanyRegistrationFields(DocumentFields):
+    DOC_TYPE: ClassVar[str] = DocType.COMPANY_REGISTRATION
     REQUIRED_FIELDS: ClassVar[list[str]] = [F.SIRET, F.SIREN]
     siret: Optional[str] = None
     siren: Optional[str] = None
@@ -95,8 +102,8 @@ class KbisFields(DocumentFields):
 
 
 @dataclass
-class RibFields(DocumentFields):
-    DOC_TYPE: ClassVar[str] = DocType.RIB
+class BankAccountDetailsFields(DocumentFields):
+    DOC_TYPE: ClassVar[str] = DocType.BANK_ACCOUNT_DETAILS
     REQUIRED_FIELDS: ClassVar[list[str]] = [F.IBAN]
     titulaire: Optional[str] = None
     iban: Optional[str] = None
@@ -121,7 +128,10 @@ class PaymentFields(DocumentFields):
 class UrssafDeclarationFields(DocumentFields):
     DOC_TYPE: ClassVar[str] = DocType.URSSAF_DECLARATION
     REQUIRED_FIELDS: ClassVar[list[str]] = [
-        F.SIRET, F.PERIODE, F.CHIFFRE_AFFAIRES_DECLARE, F.DATE_DECLARATION,
+        F.SIRET,
+        F.PERIODE,
+        F.CHIFFRE_AFFAIRES_DECLARE,
+        F.DATE_DECLARATION,
     ]
     siret: Optional[str] = None
     periode: Optional[str] = None
@@ -130,13 +140,12 @@ class UrssafDeclarationFields(DocumentFields):
 
 
 DOC_TYPE_MODELS: dict[str, type[DocumentFields]] = {
-    DocType.FACTURE: InvoiceFields,
     DocType.INVOICE: InvoiceFields,
-    DocType.DEVIS: DevisFields,
-    DocType.ATTESTATION_SIRET: AttestationSiretFields,
-    DocType.ATTESTATION_URSSAF: AttestationUrssafFields,
-    DocType.KBIS: KbisFields,
-    DocType.RIB: RibFields,
+    DocType.QUOTE: QuoteFields,
+    DocType.SIRET_CERTIFICATE: SiretCertificateFields,
+    DocType.URSSAF_CERTIFICATE: UrssafCertificateFields,
+    DocType.COMPANY_REGISTRATION: CompanyRegistrationFields,
+    DocType.BANK_ACCOUNT_DETAILS: BankAccountDetailsFields,
     DocType.PAYMENT: PaymentFields,
     DocType.URSSAF_DECLARATION: UrssafDeclarationFields,
 }
