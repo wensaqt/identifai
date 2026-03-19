@@ -27,6 +27,18 @@ SUPPLIER_COMPLIANCE = ProcessDefinition(
     ),
 )
 
+ANNUAL_DECLARATION = ProcessDefinition(
+    process_type=ProcessType.ANNUAL_DECLARATION,
+    required_doc_types=frozenset(
+        {
+            DocType.INVOICE,
+            DocType.URSSAF_DECLARATION,
+            DocType.URSSAF_CERTIFICATE,
+        }
+    ),
+)
+
 PROCESS_DEFINITIONS: dict[ProcessType, ProcessDefinition] = {
     ProcessType.SUPPLIER_COMPLIANCE: SUPPLIER_COMPLIANCE,
+    ProcessType.ANNUAL_DECLARATION: ANNUAL_DECLARATION,
 }

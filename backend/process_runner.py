@@ -73,7 +73,7 @@ class ProcessRunner:
         anomalies: list[ProcessAnomaly] = []
         anomalies.extend(self._collect_document_anomalies(documents))
         anomalies.extend(self._check_missing_documents(documents, definition))
-        anomalies.extend(self._collect_cross_doc_anomalies(documents))
+        anomalies.extend(self._collect_cross_doc_anomalies(documents, str(definition.process_type)))
 
         process.anomalies = anomalies
 
@@ -156,10 +156,10 @@ class ProcessRunner:
         return anomalies
 
     def _collect_cross_doc_anomalies(
-        self, documents: list[dict]
+        self, documents: list[dict], process_type: str | None = None
     ) -> list[ProcessAnomaly]:
         """Run verifier and convert issues to ProcessAnomaly."""
-        issues = self._verifier.verify(documents)
+        issues = self._verifier.verify(documents, process_type)
         return [
             ProcessAnomaly(
                 type=issue["type"],

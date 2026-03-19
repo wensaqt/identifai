@@ -60,10 +60,29 @@ export const PROCESSES = [
     id: "annual_declaration",
     title: "Déclaration annuelle",
     icon: "📋",
-    enabled: false,
+    enabled: true,
     description:
       "Validez votre déclaration de chiffre d'affaires auprès de l'URSSAF.",
-    documents: [],
+    documents: [
+      {
+        id: "invoice",
+        label: "Facture(s)",
+        hint: "Factures de la période déclarée",
+        required: true,
+      },
+      {
+        id: "urssaf_declaration",
+        label: "Déclaration URSSAF",
+        hint: "Déclaration de CA annuelle",
+        required: true,
+      },
+      {
+        id: "urssaf_certificate",
+        label: "Attestation URSSAF",
+        hint: "Attestation de vigilance en cours de validité",
+        required: true,
+      },
+    ],
   },
   {
     id: "payment_validation",

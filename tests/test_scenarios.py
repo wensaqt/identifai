@@ -82,18 +82,27 @@ class TestProcessRecord:
 # ── Scenario declaration tests ────────────────────────────────────────────────
 
 class TestScenarioDefinitions:
-    def test_all_eight_scenarios_declared(self):
+    def test_all_twelve_scenarios_declared(self):
         names = {s.name for s in SCENARIOS}
         expected = {
             "happy_path", "missing_payment", "mauvais_siret", "revenus_sous_declares",
             "incoherence_tva", "attestation_expiree", "paiement_sans_facture",
             "montant_paiement_incorrect",
+            "annual_happy_path", "annual_revenus_sous_declares",
+            "annual_attestation_expiree", "annual_incoherence_tva",
         }
         assert names == expected
 
-    def test_all_scenarios_use_conformite_fournisseur(self):
-        for s in SCENARIOS:
+    def test_supplier_scenarios_use_conformite_fournisseur(self):
+        supplier_scenarios = [s for s in SCENARIOS if not s.name.startswith("annual_")]
+        for s in supplier_scenarios:
             assert s.process_type == ProcessType.CONFORMITE_FOURNISSEUR
+
+    def test_annual_scenarios_use_annual_declaration(self):
+        annual_scenarios = [s for s in SCENARIOS if s.name.startswith("annual_")]
+        assert len(annual_scenarios) == 4
+        for s in annual_scenarios:
+            assert s.process_type == ProcessType.ANNUAL_DECLARATION
 
     def test_happy_path_has_no_alterations_or_omissions(self):
         hp = SCENARIO_BY_NAME["happy_path"]
@@ -264,6 +273,61 @@ class TestBuilderPaymentAmountMismatch:
             if a.type == "payment_amount_mismatch"
         )
         assert detail.details["montant_paiement"] != detail.details["montant_facture"]
+
+
+# ── Annual declaration builder tests ─────────────────────────────────────────
+
+class TestBuilderAnnualHappyPath:
+    def test_status_valid(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["annual_happy_path"].status == "valid"
+
+    def test_no_anomalies(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["annual_happy_path"].anomalies_expected == []
+
+    def test_three_doc_types(self, built_scenarios):
+        results, _ = built_scenarios
+        doc_types = {r.doc_type for r in results["annual_happy_path"].documents}
+        assert doc_types == {"invoice", "attestation_urssaf", "urssaf_declaration"}
+
+    def test_no_payment_doc(self, built_scenarios):
+        results, _ = built_scenarios
+        doc_types = {r.doc_type for r in results["annual_happy_path"].documents}
+        assert "payment" not in doc_types
+
+
+class TestBuilderAnnualRevenousSousDeclares:
+    def test_undeclared_revenue_anomaly(self, built_scenarios):
+        results, _ = built_scenarios
+        types = [a.type for a in results["annual_revenus_sous_declares"].anomalies_expected]
+        assert "undeclared_revenue" in types
+
+    def test_status_valid(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["annual_revenus_sous_declares"].status == "valid"
+
+
+class TestBuilderAnnualAttestationExpiree:
+    def test_expired_attestation_anomaly(self, built_scenarios):
+        results, _ = built_scenarios
+        types = [a.type for a in results["annual_attestation_expiree"].anomalies_expected]
+        assert "expired_attestation" in types
+
+    def test_status_error(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["annual_attestation_expiree"].status == "error"
+
+
+class TestBuilderAnnualIncoherenceTva:
+    def test_tva_mismatch_anomaly(self, built_scenarios):
+        results, _ = built_scenarios
+        types = [a.type for a in results["annual_incoherence_tva"].anomalies_expected]
+        assert "tva_mismatch" in types
+
+    def test_status_valid(self, built_scenarios):
+        results, _ = built_scenarios
+        assert results["annual_incoherence_tva"].status == "valid"
 
 
 class TestBuilderValidation:

@@ -9,6 +9,7 @@ from enum import StrEnum
 class ProcessType(StrEnum):
     """Process types supported by the dataset generator."""
     CONFORMITE_FOURNISSEUR = "conformite_fournisseur"
+    ANNUAL_DECLARATION = "annual_declaration"
 
 
 class AnomalyType(StrEnum):
@@ -74,6 +75,11 @@ PROCESS_REQUIRED_DOCS: dict[ProcessType, frozenset[DocType]] = {
         DocType.RIB,
         DocType.PAYMENT,
         DocType.URSSAF_DECLARATION,
+    }),
+    ProcessType.ANNUAL_DECLARATION: frozenset({
+        DocType.INVOICE,
+        DocType.URSSAF_DECLARATION,
+        DocType.ATTESTATION_URSSAF,
     }),
 }
 

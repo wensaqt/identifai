@@ -14,7 +14,7 @@ export function useAnalyzeDocuments() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const analyze = useCallback(async (filesMap) => {
+  const analyze = useCallback(async (filesMap, processType) => {
     setLoading(true);
     setError(null);
     setData(null);
@@ -29,6 +29,9 @@ export function useAnalyzeDocuments() {
     }
 
     formData.append("doc_types", JSON.stringify(docTypes));
+    if (processType) {
+      formData.append("process_type", processType);
+    }
 
     try {
       const result = await post("/analyze", { formData });
