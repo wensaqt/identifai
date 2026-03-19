@@ -1,0 +1,23 @@
+.doc-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.doc-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-md);
+}
+
+.doc-form__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.doc-form__count {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}

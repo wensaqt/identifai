@@ -1,0 +1,21 @@
+.demarche-card__icon {
+  font-size: 2rem;
+  margin-bottom: var(--space-sm);
+}
+
+.demarche-card__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+
+.demarche-card__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+  line-height: 1.5;
+}
+
+.demarche-card__footer {
+  margin-top: auto;
+}

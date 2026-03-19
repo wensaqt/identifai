@@ -1,0 +1,23 @@
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.results__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+}
+
+.results__heading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+}
+
+@media (max-width: 768px) {
+  .results__columns {
+    grid-template-columns: 1fr;
+  }
+}

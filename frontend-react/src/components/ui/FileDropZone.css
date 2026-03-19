@@ -1,0 +1,40 @@
+.dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.dropzone:hover,
+.dropzone--active {
+  border-color: var(--color-primary);
+  background: #eff6ff;
+}
+
+.dropzone--filled {
+  border-style: solid;
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.dropzone--error {
+  border-color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+.dropzone__input {
+  display: none;
+}
+
+.dropzone__filename {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.dropzone__placeholder {
+  color: var(--color-text-secondary);
+}

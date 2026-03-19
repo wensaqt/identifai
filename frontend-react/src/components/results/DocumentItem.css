@@ -1,0 +1,58 @@
+.doc-item__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.doc-item__icon {
+  font-size: var(--text-sm);
+}
+
+.doc-item__filename {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  flex: 1;
+}
+
+.doc-item__type {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.doc-item__chevron {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.doc-item__fields {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.doc-item__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.doc-item__table td {
+  padding: var(--space-xs) 0;
+  font-size: var(--text-sm);
+}
+
+.doc-item__field-name {
+  color: var(--color-text-secondary);
+  width: 40%;
+}
+
+.doc-item__field-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.doc-item__empty {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
