@@ -1,0 +1,19 @@
+.title-block {
+  margin-bottom: var(--space-lg);
+}
+
+.title {
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.title--h1 { font-size: var(--text-3xl); }
+.title--h2 { font-size: var(--text-2xl); }
+.title--h3 { font-size: var(--text-xl); }
+
+.title__subtitle {
+  margin-top: var(--space-xs);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}

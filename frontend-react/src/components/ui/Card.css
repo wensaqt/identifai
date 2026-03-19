@@ -1,0 +1,33 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.card--clickable {
+  cursor: pointer;
+}
+.card--clickable:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary);
+}
+
+.card--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  background: var(--color-disabled-bg);
+}
+
+.card--error {
+  border-left: 4px solid var(--color-error);
+}
+
+.card--success {
+  border-left: 4px solid var(--color-success);
+}
+
+.card--warning {
+  border-left: 4px solid var(--color-warning);
+}

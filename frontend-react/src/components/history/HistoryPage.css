@@ -1,0 +1,16 @@
+.history__loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2xl);
+}
+
+.history__empty {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
