@@ -1,7 +1,7 @@
 """Tests for CompletenessValidator."""
 from consts.anomalies import AnomalyType, Severity
 from models.process_definition import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION
-from validators.completeness import CompletenessValidator
+from validation.completeness import CompletenessValidator
 
 
 class TestFindMissing:

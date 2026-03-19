@@ -9,9 +9,9 @@ from consts.process import ProcessStatus
 from db import ProcessRepository
 from models.process import Process, ProcessAnomaly, ProcessDocument
 from models.process_definition import ProcessDefinition
-from validators.completeness import CompletenessValidator
-from validators.cross_document import CrossDocumentValidator
-from validators.structure import StructureValidator
+from validation.completeness import CompletenessValidator
+from validation.cross_document import CrossDocumentValidator
+from validation.structure import StructureValidator
 
 logger = logging.getLogger(__name__)
 

@@ -9,9 +9,9 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from models.process_definition import PROCESS_DEFINITIONS
 from ocr import extract_text
 from process_runner import ProcessRunner
-from validators.completeness import CompletenessValidator
-from validators.structure import validate_document
-from validators.upload import UploadValidator
+from validation.completeness import CompletenessValidator
+from validation.structure import validate_document
+from validation.upload import UploadValidator
 
 logger = logging.getLogger(__name__)
 
