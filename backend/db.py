@@ -8,7 +8,7 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 
 from consts.process import ProcessStatus
-from process import Process, ProcessAnomaly, ProcessDocument
+from models.process import Process, ProcessAnomaly, ProcessDocument
 
 logger = logging.getLogger(__name__)
 

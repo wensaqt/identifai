@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 
 from consts.anomalies import AnomalyType, Severity
 from consts.process import ProcessStatus
-from consts.process_definitions import ProcessDefinition
 from db import ProcessRepository
-from process import Process, ProcessAnomaly, ProcessDocument
-from validator import DocumentValidator
-from verifier import DocumentVerifier
+from models.process import Process, ProcessAnomaly, ProcessDocument
+from models.process_definition import ProcessDefinition
+from validation.completeness import CompletenessValidator
+from validation.cross_document import CrossDocumentValidator
+from validation.structure import StructureValidator
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,9 @@ class ProcessRunner:
     """Orchestrates the full pipeline and collects all anomalies at Process level."""
 
     def __init__(self, repo: ProcessRepository | None = None) -> None:
-        self._validator = DocumentValidator()
-        self._verifier = DocumentVerifier()
+        self._structure_validator = StructureValidator()
+        self._completeness_validator = CompletenessValidator()
+        self._cross_validator = CrossDocumentValidator()
         self._repo = repo
 
     # ── Public API ───────────────────────────────────────────────────────
@@ -72,7 +74,7 @@ class ProcessRunner:
 
         anomalies: list[ProcessAnomaly] = []
         anomalies.extend(self._collect_document_anomalies(documents))
-        anomalies.extend(self._check_missing_documents(documents, definition))
+        anomalies.extend(self._completeness_validator.check_missing_as_anomalies(documents, definition))
         anomalies.extend(self._collect_cross_doc_anomalies(documents, str(definition.process_type)))
 
         process.anomalies = anomalies
@@ -111,7 +113,7 @@ class ProcessRunner:
             doc_type = doc.get("doc_type")
             fields = doc.get("fields", {})
             filename = doc.get("filename", "unknown")
-            result = self._validator.validate(doc_type, fields)
+            result = self._structure_validator.validate(doc_type, fields)
 
             for issue in result["completeness"]:
                 anomalies.append(
@@ -135,31 +137,11 @@ class ProcessRunner:
                 )
         return anomalies
 
-    def _check_missing_documents(
-        self,
-        documents: list[dict],
-        definition: ProcessDefinition,
-    ) -> list[ProcessAnomaly]:
-        """Check which required doc types are missing."""
-        provided = {doc.get("doc_type") for doc in documents}
-        anomalies: list[ProcessAnomaly] = []
-        for required_type in definition.required_doc_types:
-            if required_type not in provided:
-                anomalies.append(
-                    ProcessAnomaly(
-                        type=AnomalyType.MISSING_DOCUMENT,
-                        severity=Severity.ERROR,
-                        message=f"Document manquant : {required_type}",
-                        document_refs=[],
-                    )
-                )
-        return anomalies
-
     def _collect_cross_doc_anomalies(
         self, documents: list[dict], process_type: str | None = None
     ) -> list[ProcessAnomaly]:
         """Run verifier and convert issues to ProcessAnomaly."""
-        issues = self._verifier.verify(documents, process_type)
+        issues = self._cross_validator.verify(documents, process_type)
         return [
             ProcessAnomaly(
                 type=issue["type"],
@@ -169,6 +151,15 @@ class ProcessRunner:
             )
             for issue in issues
         ]
+
+    def inject_anomalies(self, process: Process, anomalies: list[ProcessAnomaly]) -> None:
+        """Append anomalies to process, recompute status, persist."""
+        if not anomalies:
+            return
+        process.anomalies.extend(anomalies)
+        process.status = self._compute_status(process.anomalies)
+        if self._repo:
+            self._repo.update(process)
 
     def _compute_status(self, anomalies: list[ProcessAnomaly]) -> str:
         has_error = any(a.severity == Severity.ERROR for a in anomalies)
