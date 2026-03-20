@@ -14,6 +14,10 @@ EXPECTED_SCENARIOS = [
     "attestation_expiree",
     "paiement_sans_facture",
     "montant_paiement_incorrect",
+    "annual_happy_path",
+    "annual_revenus_sous_declares",
+    "annual_attestation_expiree",
+    "annual_incoherence_tva",
 ]
 
 
@@ -186,7 +190,7 @@ def test_each_document_record_has_required_keys(monkeypatch):
 
 def test_error_scenarios_have_error_status(monkeypatch):
     outdir = _run(monkeypatch)
-    error_scenarios = ["mauvais_siret", "attestation_expiree", "montant_paiement_incorrect"]
+    error_scenarios = ["mauvais_siret", "attestation_expiree", "montant_paiement_incorrect", "annual_attestation_expiree"]
     for name in error_scenarios:
         meta = _meta(outdir, name)
         assert meta["status"] == "error", f"{name} should have error status"
@@ -196,8 +200,51 @@ def test_error_scenarios_have_error_status(monkeypatch):
 def test_warning_scenarios_have_valid_status(monkeypatch):
     outdir = _run(monkeypatch)
     # Scenarios with only warnings (no error-severity anomalies)
-    warning_scenarios = ["missing_payment", "revenus_sous_declares", "incoherence_tva", "paiement_sans_facture"]
+    warning_scenarios = [
+        "missing_payment", "revenus_sous_declares", "incoherence_tva", "paiement_sans_facture",
+        "annual_revenus_sous_declares", "annual_incoherence_tva",
+    ]
     for name in warning_scenarios:
         meta = _meta(outdir, name)
         assert meta["status"] == "valid", f"{name} should have valid status (warnings only)"
+    shutil.rmtree(outdir)
+
+
+# ── Annual declaration specific tests ────────────────────────────────────────
+
+def test_annual_happy_path(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "annual_happy_path")
+    assert meta["scenario_name"] == "annual_happy_path"
+    assert meta["type"] == "annual_declaration"
+    assert meta["status"] == "valid"
+    assert meta["anomalies_expected"] == []
+    doc_types = {d["doc_type"] for d in meta["documents"]}
+    assert doc_types == {"invoice", "attestation_urssaf", "urssaf_declaration"}
+    assert "payment" not in doc_types
+    shutil.rmtree(outdir)
+
+
+def test_annual_revenus_sous_declares(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "annual_revenus_sous_declares")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "undeclared_revenue" in anomaly_types
+    shutil.rmtree(outdir)
+
+
+def test_annual_attestation_expiree(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "annual_attestation_expiree")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "expired_attestation" in anomaly_types
+    assert meta["status"] == "error"
+    shutil.rmtree(outdir)
+
+
+def test_annual_incoherence_tva(monkeypatch):
+    outdir = _run(monkeypatch)
+    meta = _meta(outdir, "annual_incoherence_tva")
+    anomaly_types = [a["type"] for a in meta["anomalies_expected"]]
+    assert "tva_mismatch" in anomaly_types
     shutil.rmtree(outdir)

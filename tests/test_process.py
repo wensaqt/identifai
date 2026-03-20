@@ -3,13 +3,14 @@ import pytest
 
 from consts.anomalies import AnomalyType, Severity
 from consts.process import ProcessStatus, ProcessType
-from consts.process_definitions import SUPPLIER_COMPLIANCE, PROCESS_DEFINITIONS
-from process import Process, ProcessAnomaly, ProcessDocument
+from models.process_definition import SUPPLIER_COMPLIANCE, ANNUAL_DECLARATION, PROCESS_DEFINITIONS
+from models.process import Process, ProcessAnomaly, ProcessDocument
 
 
 class TestEnums:
     def test_process_type_values(self):
         assert ProcessType.SUPPLIER_COMPLIANCE == "supplier_compliance"
+        assert ProcessType.ANNUAL_DECLARATION == "annual_declaration"
 
     def test_process_status_values(self):
         assert ProcessStatus.PENDING == "pending"
@@ -41,6 +42,20 @@ class TestProcessDefinition:
     def test_definition_is_frozen(self):
         with pytest.raises(AttributeError):
             SUPPLIER_COMPLIANCE.process_type = "other"
+
+
+class TestAnnualDeclarationDefinition:
+    def test_annual_declaration_exists(self):
+        assert ProcessType.ANNUAL_DECLARATION in PROCESS_DEFINITIONS
+
+    def test_required_doc_types(self):
+        d = ANNUAL_DECLARATION
+        assert d.required_doc_types == frozenset({"invoice", "urssaf_declaration", "urssaf_certificate"})
+        assert len(d.required_doc_types) == 3
+
+    def test_definition_is_frozen(self):
+        with pytest.raises(AttributeError):
+            ANNUAL_DECLARATION.process_type = "other"
 
 
 class TestProcessAnomaly:

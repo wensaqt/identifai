@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from validator import validate_completeness, validate_document, validate_format
+from validation.structure import validate_completeness, validate_document, validate_format
 
 
 class TestCompleteness:

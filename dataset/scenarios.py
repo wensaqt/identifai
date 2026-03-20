@@ -62,6 +62,37 @@ SCENARIOS: list[ScenarioDefinition] = [
         alterations=[Alteration(DocType.PAYMENT, AnomalyType.PAYMENT_AMOUNT_MISMATCH)],
         omitted_docs=[],
     ),
+    # ── Annual declaration scenarios ─────────────────────────────────────────
+    ScenarioDefinition(
+        name="annual_happy_path",
+        description=(
+            "Déclaration annuelle complète : facture, déclaration URSSAF et attestation valides."
+        ),
+        process_type=ProcessType.ANNUAL_DECLARATION,
+        alterations=[],
+        omitted_docs=[],
+    ),
+    ScenarioDefinition(
+        name="annual_revenus_sous_declares",
+        description="Le CA déclaré à l'URSSAF est inférieur au montant HT facturé (déclaration annuelle).",
+        process_type=ProcessType.ANNUAL_DECLARATION,
+        alterations=[Alteration(DocType.URSSAF_DECLARATION, AnomalyType.UNDECLARED_REVENUE)],
+        omitted_docs=[],
+    ),
+    ScenarioDefinition(
+        name="annual_attestation_expiree",
+        description="L'attestation URSSAF est expirée (déclaration annuelle).",
+        process_type=ProcessType.ANNUAL_DECLARATION,
+        alterations=[Alteration(DocType.ATTESTATION_URSSAF, AnomalyType.EXPIRED_ATTESTATION)],
+        omitted_docs=[],
+    ),
+    ScenarioDefinition(
+        name="annual_incoherence_tva",
+        description="Le montant de TVA ne correspond pas au taux appliqué sur le HT (déclaration annuelle).",
+        process_type=ProcessType.ANNUAL_DECLARATION,
+        alterations=[Alteration(DocType.INVOICE, AnomalyType.TVA_MISMATCH)],
+        omitted_docs=[],
+    ),
 ]
 
 SCENARIO_BY_NAME: dict[str, ScenarioDefinition] = {s.name: s for s in SCENARIOS}

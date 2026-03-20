@@ -7,7 +7,7 @@ export function useUpdateProcess() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const update = useCallback(async (processId, filesMap) => {
+  const update = useCallback(async (processId, filesMap, processType) => {
     setLoading(true);
     setError(null);
 
@@ -21,6 +21,9 @@ export function useUpdateProcess() {
     }
 
     formData.append("doc_types", JSON.stringify(docTypes));
+    if (processType) {
+      formData.append("process_type", processType);
+    }
 
     try {
       const res = await fetch(`${BASE_URL}/processes/${processId}`, {
