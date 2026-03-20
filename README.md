@@ -38,11 +38,6 @@ Cross-document verification
   └──▶ Compliance tool
 ```
 
-**Data Lake — 3 zones:**
-- **Raw**: original documents (PDF, images)
-- **Clean**: OCR text
-- **Curated**: structured data (JSON)
-
 ## Tech stack
 
 - **Backend**: Python (FastAPI)
